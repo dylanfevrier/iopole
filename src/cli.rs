@@ -11,8 +11,10 @@ pub struct Cli {
 pub enum Command {
     /// Store Iopole credentials in the system keyring
     Login,
-    /// Remove Iopole credentials from the system keyring
+    /// Log out and remove credentials, local database and its encryption key
     Logout,
+    /// Synchronize Iopole data into the local database
+    Sync,
 }
 
 #[cfg(test)]

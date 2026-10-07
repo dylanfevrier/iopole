@@ -29,11 +29,12 @@ fn version_flag_prints_version() {
 }
 
 #[test]
-fn help_lists_auth_commands() {
+fn help_lists_commands() {
     iopole()
         .arg("help")
         .assert()
         .success()
         .stdout(predicate::str::contains("login"))
-        .stdout(predicate::str::contains("logout"));
+        .stdout(predicate::str::contains("logout"))
+        .stdout(predicate::str::contains("sync"));
 }

@@ -12,13 +12,17 @@ readme = "README.md"
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
 dialoguer = { version = "0.12.0", default-features = false, features = ["password"] }
+etcetera = "0.11.0"
+getrandom = "0.4.3"
 keyring = "4.2.0"
+rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher"] }
 secrecy = "0.10.3"
 thiserror = "2.0.21"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
 predicates = "3.1.4"
+tempfile = "3.27.0"
 
 [lints.rust]
 unsafe_code = "forbid"

@@ -8,6 +8,7 @@ Command-line tool for the Iopole platform.
 cargo run -- --help
 cargo run -- login
 cargo run -- logout
+cargo run -- sync
 ```
 
 ## Installation
