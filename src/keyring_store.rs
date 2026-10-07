@@ -1,70 +1,124 @@
+use std::cell::RefCell;
+
 use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::Result;
 use crate::credentials::{CredentialStore, Credentials};
 use crate::database::DatabaseKeyStore;
 
 const SERVICE: &str = "iopole";
-const CLIENT_ID: &str = "client-id";
-const CLIENT_SECRET: &str = "client-secret";
-const CUSTOMER_ID: &str = "customer-id";
-const DATABASE_KEY: &str = "database-key";
+const ACCOUNT: &str = "secrets";
 
-pub(crate) struct KeyringStore;
+/// All secrets share a single keychain entry, so that macOS asks for access at
+/// most once.
+#[derive(Default, Clone, Serialize, Deserialize, Zeroize, ZeroizeOnDrop)]
+struct Secrets {
+    client_id: Option<String>,
+    client_secret: Option<String>,
+    customer_id: Option<String>,
+    database_key: Option<String>,
+}
+
+impl Secrets {
+    fn is_empty(&self) -> bool {
+        self.client_secret.is_none() && self.database_key.is_none()
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct KeyringStore {
+    cache: RefCell<Option<Secrets>>,
+}
 
 impl KeyringStore {
-    fn entry(name: &str) -> Result<keyring::Entry> {
-        Ok(keyring::Entry::new(SERVICE, name)?)
+    fn entry() -> Result<keyring::Entry> {
+        Ok(keyring::Entry::new(SERVICE, ACCOUNT)?)
     }
 
-    fn read(name: &str) -> Result<Option<SecretString>> {
-        match Self::entry(name)?.get_password() {
-            Ok(value) => Ok(Some(SecretString::from(value))),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(err) => Err(err.into()),
+    fn secrets(&self) -> Result<Secrets> {
+        if let Some(secrets) = self.cache.borrow().as_ref() {
+            return Ok(secrets.clone());
         }
+        let secrets = match Self::entry()?.get_password() {
+            Ok(json) => serde_json::from_str(SecretString::from(json).expose_secret())?,
+            Err(keyring::Error::NoEntry) => Secrets::default(),
+            Err(err) => return Err(err.into()),
+        };
+        *self.cache.borrow_mut() = Some(secrets.clone());
+        Ok(secrets)
     }
 
-    fn write(name: &str, value: &str) -> Result<()> {
-        Ok(Self::entry(name)?.set_password(value)?)
-    }
-
-    fn remove(name: &str) -> Result<()> {
-        match Self::entry(name)?.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(err) => Err(err.into()),
+    fn update(&self, change: impl FnOnce(&mut Secrets)) -> Result<()> {
+        let mut secrets = self.secrets()?;
+        change(&mut secrets);
+        if secrets.is_empty() {
+            match Self::entry()?.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => {}
+                Err(err) => return Err(err.into()),
+            }
+        } else {
+            let json = SecretString::from(serde_json::to_string(&secrets)?);
+            Self::entry()?.set_password(json.expose_secret())?;
         }
+        *self.cache.borrow_mut() = Some(secrets);
+        Ok(())
     }
 }
 
 impl CredentialStore for KeyringStore {
     fn has_credentials(&self) -> Result<bool> {
-        Ok(Self::read(CLIENT_SECRET)?.is_some())
+        Ok(self.secrets()?.client_secret.is_some())
+    }
+
+    fn load(&self) -> Result<Option<Credentials>> {
+        let secrets = self.secrets()?;
+        let (Some(client_id), Some(client_secret), Some(customer_id)) = (
+            &secrets.client_id,
+            &secrets.client_secret,
+            &secrets.customer_id,
+        ) else {
+            return Ok(None);
+        };
+        Ok(Some(Credentials {
+            client_id: client_id.clone(),
+            client_secret: SecretString::from(client_secret.as_str()),
+            customer_id: customer_id.clone(),
+        }))
     }
 
     fn save(&self, credentials: &Credentials) -> Result<()> {
-        Self::write(CLIENT_ID, &credentials.client_id)?;
-        Self::write(CLIENT_SECRET, credentials.client_secret.expose_secret())?;
-        Self::write(CUSTOMER_ID, &credentials.customer_id)
+        self.update(|secrets| {
+            secrets.client_id = Some(credentials.client_id.clone());
+            secrets.client_secret = Some(credentials.client_secret.expose_secret().to_owned());
+            secrets.customer_id = Some(credentials.customer_id.clone());
+        })
     }
 
     fn delete(&self) -> Result<()> {
-        [CLIENT_ID, CLIENT_SECRET, CUSTOMER_ID]
-            .into_iter()
-            .try_for_each(Self::remove)
+        self.update(|secrets| {
+            secrets.client_id.zeroize();
+            secrets.client_secret.zeroize();
+            secrets.customer_id.zeroize();
+        })
     }
 }
 
 impl DatabaseKeyStore for KeyringStore {
     fn load_key(&self) -> Result<Option<SecretString>> {
-        Self::read(DATABASE_KEY)
+        Ok(self
+            .secrets()?
+            .database_key
+            .as_deref()
+            .map(SecretString::from))
     }
 
     fn save_key(&self, key: &SecretString) -> Result<()> {
-        Self::write(DATABASE_KEY, key.expose_secret())
+        self.update(|secrets| secrets.database_key = Some(key.expose_secret().to_owned()))
     }
 
     fn delete_key(&self) -> Result<()> {
-        Self::remove(DATABASE_KEY)
+        self.update(|secrets| secrets.database_key.zeroize())
     }
 }
