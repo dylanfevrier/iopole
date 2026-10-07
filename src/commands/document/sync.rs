@@ -4,11 +4,10 @@ use std::path::Path;
 use indicatif::ProgressStyle;
 use jiff::SignedDuration;
 
-use crate::cli::{DirectionFilter, SyncArgs};
+use crate::cli::SyncArgs;
 use crate::clock::Clock;
 use crate::credentials::{CredentialStore, Credentials};
 use crate::database::{self, DatabaseKeyStore};
-use crate::invoice::Direction;
 use crate::iopole::{InvoiceSearch, UuidBound};
 use crate::sync::{Progress, SqliteInvoiceStore, SyncConfig, Synchronizer, TimeWindow};
 use crate::{Error, Result};
@@ -24,7 +23,7 @@ pub(crate) fn execute<S: InvoiceSearch>(
 ) -> Result<()> {
     let period = requested_period(args, clock)?;
     let credentials = credentials.load()?.ok_or(Error::NotLoggedIn)?;
-    let directions = directions(args.direction);
+    let directions = args.direction.directions();
 
     let mut store = SqliteInvoiceStore::new(database::open(database_path, keys)?);
     let mut search = connect(credentials);
@@ -60,14 +59,6 @@ fn requested_period(args: &SyncArgs, clock: &impl Clock) -> Result<TimeWindow> {
     UuidBound::try_from(from)?;
     UuidBound::try_from(to)?;
     TimeWindow::new(from, to).ok_or(Error::EmptyPeriod { from, to })
-}
-
-fn directions(filter: DirectionFilter) -> &'static [Direction] {
-    match filter {
-        DirectionFilter::Inbound => &[Direction::Inbound],
-        DirectionFilter::Outbound => &[Direction::Outbound],
-        DirectionFilter::Both => &[Direction::Inbound, Direction::Outbound],
-    }
 }
 
 struct ProgressBar(indicatif::ProgressBar);

@@ -156,3 +156,37 @@ fn database_is_only_accessible_by_owner() -> Result<()> {
     assert_eq!(mode(&path)?, 0o600);
     Ok(())
 }
+
+#[test]
+fn migration_extracts_identifier_values_of_any_scheme() -> Result<()> {
+    let tmp = tempfile::tempdir()?;
+    let path = tmp.path().join("iopole.db");
+    let keys = InMemoryKeyStore::default();
+    let mut connection = Connection::open(&path)?;
+    let key = generate_key()?;
+    keys.save_key(&key)?;
+    unlock(&connection, &key, &path)?;
+    connection.execute_batch(MIGRATIONS[0])?;
+    connection.execute_batch(
+        "INSERT INTO invoice (invoice_id, direction, state, created_at, seller_address,
+                              buyer_address, raw, synced_at)
+         VALUES ('01a1', 'INBOUND', 'VALID', '', '0208:0123456789', '0225:352862346', '{}', ''),
+                ('01a2', 'INBOUND', 'VALID', '', 'no-scheme', NULL, '{}', '');
+         PRAGMA user_version = 1;",
+    )?;
+
+    migrate(&mut connection)?;
+
+    let identifiers: Vec<(Option<String>, Option<String>)> = connection
+        .prepare("SELECT seller_identifier, buyer_identifier FROM invoice ORDER BY invoice_id")?
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert_eq!(
+        identifiers,
+        [
+            (Some("0123456789".to_owned()), Some("352862346".to_owned())),
+            (None, None),
+        ]
+    );
+    Ok(())
+}

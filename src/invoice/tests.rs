@@ -17,15 +17,25 @@ fn party(address: &str) -> Party {
 }
 
 #[test]
-fn reads_siren_from_0225_address() {
-    assert_eq!(party("0225:352862346").siren(), Some("352862346"));
+fn identifier_value_ignores_the_scheme() {
+    assert_eq!(
+        party("0225:352862346").identifier_value(),
+        Some("352862346")
+    );
+    assert_eq!(
+        party("0002:352862346").identifier_value(),
+        Some("352862346")
+    );
+    assert_eq!(
+        party("0208:0123456789").identifier_value(),
+        Some("0123456789")
+    );
 }
 
 #[test]
-fn ignores_other_address_schemes() {
-    assert_eq!(party("0009:35286234600012").siren(), None);
-    assert_eq!(party("0225:35286234").siren(), None);
-    assert_eq!(party("0225:35286234A").siren(), None);
+fn address_without_value_has_no_identifier() {
+    assert_eq!(party("352862346").identifier_value(), None);
+    assert_eq!(party("0225:").identifier_value(), None);
 }
 
 #[test]

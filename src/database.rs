@@ -13,7 +13,10 @@ const DATABASE_FILE: &str = "iopole.db";
 const KEY_BYTES: usize = 32;
 const SQLITE_SIDE_FILE_SUFFIXES: [&str; 3] = ["-journal", "-wal", "-shm"];
 
-const MIGRATIONS: [&str; 1] = [include_str!("migrations/001_invoices.sql")];
+const MIGRATIONS: [&str; 2] = [
+    include_str!("migrations/001_invoices.sql"),
+    include_str!("migrations/002_party_identifiers.sql"),
+];
 
 pub(crate) trait DatabaseKeyStore {
     fn load_key(&self) -> Result<Option<SecretString>>;

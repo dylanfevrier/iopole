@@ -1,4 +1,5 @@
 use super::*;
+use crate::cli::DirectionFilter;
 use crate::clock::testing::FixedClock;
 use crate::credentials::testing::InMemoryStore;
 use crate::database::testing::InMemoryKeyStore;

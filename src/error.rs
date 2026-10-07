@@ -27,7 +27,7 @@ pub enum Error {
     KeyGeneration(#[from] getrandom::Error),
 
     #[error(
-        "encryption key for {} is missing from the system keyring; delete the database and run `iopole sync` again",
+        "encryption key for {} is missing from the system keyring; delete the database and run `iopole document sync` again",
         .0.display()
     )]
     MissingDatabaseKey(PathBuf),

@@ -8,12 +8,13 @@ Command-line tool for the Iopole platform.
 cargo run -- --help
 cargo run -- login
 cargo run -- logout
-cargo run -- sync --from 2026-09-01 [--to 2026-10-01] [--direction inbound|outbound|both]
+cargo run -- document sync --from 2026-09-01 [--to 2026-10-01] [--direction inbound|outbound|both]
+cargo run -- document search 352862346
 ```
 
-### Sync
+### Document sync
 
-`sync` stores the general information of Iopole invoices (never payment
+`document sync` stores the general information of Iopole invoices (never payment
 means) in an encrypted SQLite database whose key lives in the system keyring.
 
 - Invoices are searched by ranges of their UUID v7 identifier, one day at a
@@ -22,19 +23,33 @@ means) in an encrypted SQLite database whose key lives in the system keyring.
 - Each search also replays the last 10% of the previous window, so that no
   invoice falls between two searches. Invoices found again only get their
   status refreshed, and only when it is not older than the stored one.
-- Ranges already synchronized are never searched again: running `sync` twice
-  only fills the gaps. The last hour stays open and is searched again by the
-  next run.
+- Ranges already synchronized are never searched again: running
+  `document sync` twice only fills the gaps. The last hour stays open and is
+  searched again by the next run.
 - Production is used by default. Set `IOPOLE_AUTH_URL` and `IOPOLE_PDP_URL`
   (and optionally `IOPOLE_AUTH_ENDPOINT`) to target another environment, for
   instance `https://auth.ppd.iopole.fr` and `https://api.ppd.iopole.fr`.
 
-`sync` shows its progress, then the number of invoices retrieved:
+`document sync` shows its progress, then the number of invoices retrieved:
 
 ```
 ████████████████████████████████████████ 100%
 1234 invoices retrieved. 1000 inbound. 234 outbound.
 ```
+
+### Document search
+
+`document search` looks for the invoices of a company, as seller or buyer, in
+the local database only. It matches the value of the electronic address whatever its
+scheme: `352862346` finds `0225:352862346` and `0002:352862346`, `0123456789`
+finds `0208:0123456789`.
+
+```sh
+cargo run -- document search 352862346 [--role seller|buyer] [--direction inbound|outbound|both] \
+    [--state VALID,DELIVERED] [--status REJECTED] [--from 2026-09-01] [--to 2026-10-01] [--limit 50]
+```
+
+When nothing matches, it suggests the `document sync` command to run.
 
 ## Installation
 

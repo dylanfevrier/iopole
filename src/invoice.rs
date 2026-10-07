@@ -37,9 +37,11 @@ pub(crate) struct Party {
 }
 
 impl Party {
-    pub(crate) fn siren(&self) -> Option<&str> {
-        let siren = self.electronic_address.as_deref()?.strip_prefix("0225:")?;
-        (siren.len() == 9 && siren.bytes().all(|b| b.is_ascii_digit())).then_some(siren)
+    /// Value of the electronic address, whatever its scheme: `352862346` for
+    /// `0225:352862346`, `0123456789` for `0208:0123456789`.
+    pub(crate) fn identifier_value(&self) -> Option<&str> {
+        let (_, value) = self.electronic_address.as_deref()?.split_once(':')?;
+        (!value.is_empty()).then_some(value)
     }
 }
 

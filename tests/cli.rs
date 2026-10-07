@@ -36,5 +36,15 @@ fn help_lists_commands() {
         .success()
         .stdout(predicate::str::contains("login"))
         .stdout(predicate::str::contains("logout"))
-        .stdout(predicate::str::contains("sync"));
+        .stdout(predicate::str::contains("document"));
+}
+
+#[test]
+fn document_help_lists_sync_and_search() {
+    iopole()
+        .args(["document", "help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("sync"))
+        .stdout(predicate::str::contains("search"));
 }

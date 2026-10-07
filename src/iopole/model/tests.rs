@@ -48,7 +48,7 @@ fn parses_documented_payload() -> Result<()> {
     assert_eq!(invoice.number.as_deref(), Some("004791000-0000219237"));
     assert_eq!(invoice.amount.as_deref(), Some("60"));
     assert_eq!(invoice.seller.name.as_deref(), Some("CCLS"));
-    assert_eq!(invoice.buyer.siren(), Some("517657334"));
+    assert_eq!(invoice.buyer.identifier_value(), Some("517657334"));
     Ok(())
 }
 

@@ -1,3 +1,4 @@
+mod catalog;
 mod cli;
 mod clock;
 mod commands;
@@ -11,7 +12,7 @@ mod sync;
 
 use std::io::Write;
 
-pub use cli::{Cli, Command, DirectionFilter, SyncArgs};
+pub use cli::{Cli, Command, DirectionFilter, DocumentCommand, RoleFilter, SearchArgs, SyncArgs};
 pub use error::{Error, Result};
 
 use clock::SystemClock;
@@ -27,7 +28,9 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         Command::Logout => {
             commands::logout::execute(&keyring, &database::default_path()?, &keyring, out)
         }
-        Command::Sync(args) => commands::sync::execute(
+        Command::Document {
+            command: DocumentCommand::Sync(args),
+        } => commands::document::sync::execute(
             &keyring,
             &database::default_path()?,
             &keyring,
@@ -36,5 +39,8 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
             args,
             out,
         ),
+        Command::Document {
+            command: DocumentCommand::Search(args),
+        } => commands::document::search::execute(&database::default_path()?, &keyring, args, out),
     }
 }
