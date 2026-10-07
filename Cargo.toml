@@ -2,8 +2,8 @@
 name = "iopole"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
-description = "Outil en ligne de commande pour interagir avec la plateforme Iopole"
+rust-version = "1.88"
+description = "Command-line tool for the Iopole platform"
 authors = ["Dylan Fevrier <hello@dylanfevrier.com>"]
 license = "UNLICENSED"
 publish = false
@@ -11,6 +11,10 @@ readme = "README.md"
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
+dialoguer = { version = "0.12.0", default-features = false, features = ["password"] }
+keyring = "4.2.0"
+secrecy = "0.10.3"
+thiserror = "2.0.21"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
@@ -18,13 +22,13 @@ predicates = "3.1.4"
 
 [lints.rust]
 unsafe_code = "forbid"
-missing_docs = "warn"
 unreachable_pub = "warn"
 
 [lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 unwrap_used = "warn"
 expect_used = "warn"
+missing_errors_doc = "allow"
 
 [profile.release]
 lto = true

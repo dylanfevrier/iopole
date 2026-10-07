@@ -1,11 +1,19 @@
-//! Définition de l'interface en ligne de commande.
+use clap::{Parser, Subcommand};
 
-use clap::Parser;
-
-/// Outil en ligne de commande pour interagir avec la plateforme Iopole.
 #[derive(Debug, Parser)]
-#[command(name = "iopole", version, about, long_about = None)]
-pub struct Cli {}
+#[command(name = "iopole", version, about)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    /// Store Iopole credentials in the system keyring
+    Login,
+    /// Remove Iopole credentials from the system keyring
+    Logout,
+}
 
 #[cfg(test)]
 mod tests {

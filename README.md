@@ -1,14 +1,22 @@
 # iopole
 
-Outil en ligne de commande pour interagir avec la plateforme Iopole.
+Command-line tool for the Iopole platform.
 
-## Utilisation
+## Usage
 
 ```sh
-cargo run -- --help      # liste les commandes disponibles
+cargo run -- --help
+cargo run -- login
+cargo run -- logout
 ```
 
-## Développement
+## Installation
+
+```sh
+cargo install --path .
+```
+
+## Development
 
 ```sh
 cargo fmt --check
