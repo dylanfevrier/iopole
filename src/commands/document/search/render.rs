@@ -7,7 +7,8 @@ use crate::catalog::{InvoiceRow, Page};
 use crate::render::{MISSING, Table};
 
 const NAME_WIDTH: usize = 30;
-const COLUMNS: [&str; 8] = [
+const COLUMNS: [&str; 9] = [
+    "ID",
     "DATE",
     "DIRECTION",
     "NUMBER",
@@ -47,9 +48,10 @@ pub(super) fn no_invoice(out: &mut impl Write, sync_command: &str) -> Result<()>
     Ok(())
 }
 
-fn cells(invoice: &InvoiceRow) -> [String; 8] {
+fn cells(invoice: &InvoiceRow) -> [String; 9] {
     let optional = |value: &Option<String>| value.clone().unwrap_or_else(|| MISSING.to_owned());
     [
+        invoice.id.clone(),
         date(&invoice.created_at),
         invoice.direction.to_lowercase(),
         optional(&invoice.number),
@@ -89,7 +91,7 @@ mod tests {
 
     fn delivered() -> InvoiceRow {
         InvoiceRow {
-            id: "01a2".to_owned(),
+            id: "0199a8f2-6b1c-7d3e-9f40-1a2b3c4d5e6f".to_owned(),
             direction: "INBOUND".to_owned(),
             created_at: "2026-09-02T23:30:00.000+00:00".to_owned(),
             number: Some("F-2026-0042".to_owned()),
@@ -103,7 +105,7 @@ mod tests {
 
     fn pending() -> InvoiceRow {
         InvoiceRow {
-            id: "01a1".to_owned(),
+            id: "0199a3c1-0e5d-7a21-8b77-6c5d4e3f2a10".to_owned(),
             direction: "OUTBOUND".to_owned(),
             created_at: "2026-09-01T08:00:00.000+00:00".to_owned(),
             number: None,
@@ -125,9 +127,9 @@ mod tests {
         assert_eq!(
             rendered(&page),
             "\
-DATE        DIRECTION  NUMBER       SELLER  BUYER                            AMOUNT  STATE      STATUS
-2026-09-02  inbound    F-2026-0042  CCLS    LES RAVALEURS MANTOIS ET ASSO…  1250.00  DELIVERED  APPROVED
-2026-09-01  outbound   -            -       CCLS                                 60  PENDING    -
+ID                                    DATE        DIRECTION  NUMBER       SELLER  BUYER                            AMOUNT  STATE      STATUS
+0199a8f2-6b1c-7d3e-9f40-1a2b3c4d5e6f  2026-09-02  inbound    F-2026-0042  CCLS    LES RAVALEURS MANTOIS ET ASSO…  1250.00  DELIVERED  APPROVED
+0199a3c1-0e5d-7a21-8b77-6c5d4e3f2a10  2026-09-01  outbound   -            -       CCLS                                 60  PENDING    -
 
 2 invoices found.
 "
