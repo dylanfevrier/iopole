@@ -82,6 +82,40 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
     Ok(page)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct StateCount {
+    pub(crate) state: String,
+    pub(crate) last_status_code: Option<String>,
+    pub(crate) count: usize,
+}
+
+/// Synchronized invoices of these directions counted by state, then by last
+/// status.
+pub(crate) fn count_by_state(
+    connection: &Connection,
+    directions: &[Direction],
+) -> Result<Vec<StateCount>> {
+    let mut statement = connection.prepare(&format!(
+        "SELECT state, last_status_code, count(*) FROM invoice
+         WHERE direction IN ({})
+         GROUP BY state, last_status_code",
+        vec!["?"; directions.len()].join(", ")
+    ))?;
+    let counts = statement
+        .query_map(
+            params_from_iter(directions.iter().map(|direction| direction.as_str())),
+            |row| {
+                Ok(StateCount {
+                    state: row.get(0)?,
+                    last_status_code: row.get(1)?,
+                    count: usize::try_from(row.get::<_, i64>(2)?).unwrap_or_default(),
+                })
+            },
+        )?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(counts)
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct InvoiceParties {
     pub(crate) seller_name: Option<String>,
@@ -390,6 +424,51 @@ mod tests {
         };
 
         assert_eq!(ids(&find(&fixture.connection, &bce)?), ["01a5"]);
+        Ok(())
+    }
+
+    #[test]
+    fn counts_invoices_by_state_and_last_status() -> Result<()> {
+        let fixture = populated()?;
+
+        let mut counts = count_by_state(
+            &fixture.connection,
+            &[Direction::Inbound, Direction::Outbound],
+        )?;
+        counts
+            .sort_by(|a, b| (&a.state, &a.last_status_code).cmp(&(&b.state, &b.last_status_code)));
+
+        let count = |state: &str, status: Option<&str>, count| StateCount {
+            state: state.to_owned(),
+            last_status_code: status.map(str::to_owned),
+            count,
+        };
+        assert_eq!(
+            counts,
+            [
+                count("DELIVERED", None, 1),
+                count("DELIVERED", Some("REJECTED"), 1),
+                count("INVALID", None, 1),
+                count("VALID", Some("APPROVED"), 1),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn counts_only_the_invoices_of_the_directions() -> Result<()> {
+        let fixture = populated()?;
+
+        let outbound = count_by_state(&fixture.connection, &[Direction::Outbound])?;
+
+        assert_eq!(
+            outbound,
+            [StateCount {
+                state: "VALID".to_owned(),
+                last_status_code: Some("APPROVED".to_owned()),
+                count: 1,
+            }]
+        );
         Ok(())
     }
 

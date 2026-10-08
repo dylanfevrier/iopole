@@ -1,4 +1,5 @@
 pub(crate) mod search;
+pub(crate) mod stat;
 pub(crate) mod status;
 pub(crate) mod sync;
 
@@ -15,6 +16,8 @@ pub(crate) enum Command {
     Sync(sync::Args),
     /// Search synchronized invoices, of every company or of one by its electronic address
     Search(search::Args),
+    /// Count synchronized invoices by state, then by last status
+    Stat(stat::Args),
     /// Show the status history of an invoice, live from Iopole
     Status(status::Args),
 }

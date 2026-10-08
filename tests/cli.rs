@@ -64,6 +64,7 @@ fn document_help_lists_its_commands() {
         .success()
         .stdout(predicate::str::contains("sync"))
         .stdout(predicate::str::contains("search"))
+        .stdout(predicate::str::contains("stat "))
         .stdout(predicate::str::contains("status"));
 }
 

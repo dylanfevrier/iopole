@@ -10,6 +10,7 @@ cargo run -- auth login
 cargo run -- auth logout
 cargo run -- document sync --from 2026-09-01 [--to 2026-10-01] [--direction inbound|outbound|both]
 cargo run -- document search 352862346
+cargo run -- document stat [--direction inbound|outbound|both]
 cargo run -- document status 01a10b05-e3fd-74c8-b9cd-ce8e4c012777
 cargo run -- entity search 352862346
 cargo run -- entity update-claim 980217632 --company-uid 6071797 [--direction inbound|outbound|both]
@@ -62,6 +63,23 @@ When nothing matches, it suggests the `document sync` command to run.
 
 `--json` prints the matching invoices as Iopole returned them when
 synchronized, pretty-printed, as a list (`[]` when nothing matches).
+
+### Document stat
+
+`document stat` counts the invoices of the local database by state, each
+detailed by last status, the most frequent first. `--direction` keeps one
+invoice flow; it counts both by default:
+
+```
+STATE          STATUS       COUNT
+DELIVERED      -             1000
+-              RECEIVED       580
+-              ISSUED         420
+WRONG_ROUTING  -             3000
+-              (no status)   3000
+
+4000 invoices.
+```
 
 ### Document status
 
