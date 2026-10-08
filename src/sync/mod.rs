@@ -37,6 +37,16 @@ impl Default for SyncConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SyncMode {
+    /// Searches only what was never synchronized; invoices found again only
+    /// get a newer status.
+    FillGaps,
+    /// Searches the whole period again and rewrites every invoice that
+    /// changed.
+    Refresh,
+}
+
 pub(crate) trait Progress {
     fn advance(&mut self, synchronized: SignedDuration);
 }

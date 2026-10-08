@@ -8,7 +8,7 @@ Command-line tool for the Iopole platform.
 cargo run -- --help
 cargo run -- auth login
 cargo run -- auth logout
-cargo run -- document sync --from 2026-09-01 [--to 2026-10-01] [--direction inbound|outbound|both]
+cargo run -- document sync --from 2026-09-01 [--to 2026-10-01] [--direction inbound|outbound|both] [--refresh]
 cargo run -- document search 352862346
 cargo run -- document stat [--direction inbound|outbound|both]
 cargo run -- document status 01a10b05-e3fd-74c8-b9cd-ce8e4c012777
@@ -31,6 +31,10 @@ means) in an encrypted SQLite database whose key lives in the system keyring.
 - Ranges already synchronized are never searched again: running
   `document sync` twice only fills the gaps. The last hour stays open and is
   searched again by the next run.
+- `--refresh` searches the whole period again, ranges already synchronized
+  included, and rewrites every stored invoice that differs from what Iopole
+  returns now: status, business data and raw JSON alike, even when the status
+  looks older. It then also tells how many invoices were updated.
 - Production is used by default. Set `IOPOLE_AUTH_URL` and `IOPOLE_PDP_URL`
   (and optionally `IOPOLE_AUTH_ENDPOINT`) to target another environment, for
   instance `https://auth.ppd.iopole.fr` and `https://api.ppd.iopole.fr`.

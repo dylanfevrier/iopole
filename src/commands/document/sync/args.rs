@@ -4,7 +4,7 @@ use jiff::Timestamp;
 use super::super::{DirectionFilter, parse_instant};
 use crate::clock::Clock;
 use crate::iopole::UuidBound;
-use crate::sync::TimeWindow;
+use crate::sync::{SyncMode, TimeWindow};
 use crate::{Error, Result};
 
 #[derive(Debug, ClapArgs)]
@@ -20,6 +20,21 @@ pub(crate) struct Args {
     /// Invoice flow to synchronize
     #[arg(long, value_enum, default_value_t = DirectionFilter::Both)]
     pub(crate) direction: DirectionFilter,
+
+    /// Search the whole period again, even what is already synchronized, and
+    /// rewrite every invoice that changed
+    #[arg(long)]
+    pub(crate) refresh: bool,
+}
+
+impl Args {
+    pub(crate) fn mode(&self) -> SyncMode {
+        if self.refresh {
+            SyncMode::Refresh
+        } else {
+            SyncMode::FillGaps
+        }
+    }
 }
 
 impl Args {
@@ -47,6 +62,7 @@ mod tests {
             parse_args::<Args>(&["--from", "2026-09-01"]).unwrap_or_else(|err| panic!("{err}"));
 
         assert_eq!(args.direction, DirectionFilter::Both);
+        assert_eq!(args.mode(), SyncMode::FillGaps);
         assert_eq!(
             args.period(&now()?)?,
             TimeWindow::new(

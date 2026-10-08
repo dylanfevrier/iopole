@@ -1,6 +1,7 @@
 use jiff::Timestamp;
-use rusqlite::{Connection, OptionalExtension, Transaction, params};
+use rusqlite::{Connection, OptionalExtension, ToSql, Transaction, params};
 
+use super::SyncMode;
 use super::window::TimeWindow;
 use crate::Result;
 use crate::invoice::{Direction, Invoice, Status};
@@ -27,6 +28,7 @@ pub(crate) struct WindowBatch<'a> {
     pub(crate) direction: Direction,
     pub(crate) window: TimeWindow,
     pub(crate) status: RangeStatus,
+    pub(crate) mode: SyncMode,
     pub(crate) invoices: &'a [Invoice],
     pub(crate) synced_at: Timestamp,
 }
@@ -81,6 +83,11 @@ impl InvoiceStore for SqliteInvoiceStore {
                     insert_invoice(&transaction, invoice, &synced_at)?;
                     stats.inserted += 1;
                 }
+                Some(_) if batch.mode == SyncMode::Refresh => {
+                    if rewrite_invoice(&transaction, invoice, &synced_at)? {
+                        stats.updated += 1;
+                    }
+                }
                 Some(stored) if invoice.status.supersedes(&stored) => {
                     update_status(&transaction, invoice, &synced_at)?;
                     stats.updated += 1;
@@ -113,40 +120,88 @@ fn stored_status(transaction: &Transaction<'_>, invoice_id: &str) -> Result<Opti
     Ok(status)
 }
 
+/// Every column of an invoice, bound to `?1`..`?19` in this order.
+fn execute_with_columns(
+    transaction: &Transaction<'_>,
+    sql: &str,
+    invoice: &Invoice,
+    synced_at: &str,
+) -> Result<usize> {
+    let (seller_identifier, buyer_identifier) = (
+        invoice.seller.identifier_value(),
+        invoice.buyer.identifier_value(),
+    );
+    let columns: [&dyn ToSql; 19] = [
+        &invoice.id,
+        &invoice.direction,
+        &invoice.status.state,
+        &invoice.created_at,
+        &invoice.status.last_code,
+        &invoice.status.last_state,
+        &invoice.status.last_date,
+        &invoice.number,
+        &invoice.amount,
+        &invoice.seller.name,
+        &invoice.seller.electronic_address,
+        &seller_identifier,
+        &invoice.seller.country,
+        &invoice.buyer.name,
+        &invoice.buyer.electronic_address,
+        &buyer_identifier,
+        &invoice.buyer.country,
+        &invoice.raw,
+        &synced_at,
+    ];
+    Ok(transaction.prepare_cached(sql)?.execute(&columns[..])?)
+}
+
 fn insert_invoice(transaction: &Transaction<'_>, invoice: &Invoice, synced_at: &str) -> Result<()> {
-    transaction
-        .prepare_cached(
-            "INSERT INTO invoice (
-                invoice_id, direction, state, created_at,
-                last_status_code, last_status_state, last_status_date,
-                number, amount,
-                seller_name, seller_address, seller_identifier, seller_country,
-                buyer_name, buyer_address, buyer_identifier, buyer_country,
-                raw, synced_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
-        )?
-        .execute(params![
-            invoice.id,
-            invoice.direction,
-            invoice.status.state,
-            invoice.created_at,
-            invoice.status.last_code,
-            invoice.status.last_state,
-            invoice.status.last_date,
-            invoice.number,
-            invoice.amount,
-            invoice.seller.name,
-            invoice.seller.electronic_address,
-            invoice.seller.identifier_value(),
-            invoice.seller.country,
-            invoice.buyer.name,
-            invoice.buyer.electronic_address,
-            invoice.buyer.identifier_value(),
-            invoice.buyer.country,
-            invoice.raw,
-            synced_at,
-        ])?;
+    execute_with_columns(
+        transaction,
+        "INSERT INTO invoice (
+            invoice_id, direction, state, created_at,
+            last_status_code, last_status_state, last_status_date,
+            number, amount,
+            seller_name, seller_address, seller_identifier, seller_country,
+            buyer_name, buyer_address, buyer_identifier, buyer_country,
+            raw, synced_at
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+        invoice,
+        synced_at,
+    )?;
     Ok(())
+}
+
+/// Rewrites the invoice as Iopole returns it now, when anything differs:
+/// `true` when it changed.
+fn rewrite_invoice(
+    transaction: &Transaction<'_>,
+    invoice: &Invoice,
+    synced_at: &str,
+) -> Result<bool> {
+    let changed = execute_with_columns(
+        transaction,
+        "UPDATE invoice SET
+            direction = ?2, state = ?3, created_at = ?4,
+            last_status_code = ?5, last_status_state = ?6, last_status_date = ?7,
+            number = ?8, amount = ?9,
+            seller_name = ?10, seller_address = ?11, seller_identifier = ?12, seller_country = ?13,
+            buyer_name = ?14, buyer_address = ?15, buyer_identifier = ?16, buyer_country = ?17,
+            raw = ?18, synced_at = ?19
+         WHERE invoice_id = ?1 AND (
+            direction IS NOT ?2 OR state IS NOT ?3 OR created_at IS NOT ?4
+            OR last_status_code IS NOT ?5 OR last_status_state IS NOT ?6
+            OR last_status_date IS NOT ?7 OR number IS NOT ?8 OR amount IS NOT ?9
+            OR seller_name IS NOT ?10 OR seller_address IS NOT ?11
+            OR seller_identifier IS NOT ?12 OR seller_country IS NOT ?13
+            OR buyer_name IS NOT ?14 OR buyer_address IS NOT ?15
+            OR buyer_identifier IS NOT ?16 OR buyer_country IS NOT ?17
+            OR raw IS NOT ?18
+         )",
+        invoice,
+        synced_at,
+    )?;
+    Ok(changed > 0)
 }
 
 /// Business data stays as first synchronized.
@@ -232,6 +287,7 @@ mod tests {
             direction: Direction::Inbound,
             window,
             status,
+            mode: SyncMode::FillGaps,
             invoices,
             synced_at: Timestamp::UNIX_EPOCH,
         }
@@ -310,6 +366,43 @@ mod tests {
             .commit(&batch(day(), RangeStatus::Complete, &[changed]))?;
 
         assert_eq!(temp.raw_of("01a1")?, "{}");
+        Ok(())
+    }
+
+    #[test]
+    fn refresh_rewrites_every_changed_invoice() -> Result<()> {
+        let mut temp = TempStore::new()?;
+        temp.store.commit(&batch(
+            day(),
+            RangeStatus::Complete,
+            &[
+                invoice("01a1", "DELIVERED", Some("2026-09-04T11:00:00Z")),
+                invoice("01a2", "VALID", None),
+            ],
+        ))?;
+        // Iopole is the reference: even an older status replaces the stored one.
+        let corrected = Invoice {
+            amount: Some("72".to_owned()),
+            raw: r#"{"changed":true}"#.to_owned(),
+            ..invoice("01a1", "PENDING", Some("2026-09-04T09:00:00Z"))
+        };
+        let refreshed = [corrected.clone(), invoice("01a2", "VALID", None)];
+
+        let stats = temp.store.commit(&WindowBatch {
+            mode: SyncMode::Refresh,
+            ..batch(day(), RangeStatus::Complete, &refreshed)
+        })?;
+
+        assert_eq!(
+            stats,
+            WriteStats {
+                inserted: 0,
+                updated: 1
+            }
+        );
+        assert_eq!(temp.raw_of("01a1")?, r#"{"changed":true}"#);
+        assert_eq!(temp.status_of("01a1")?, corrected.status);
+        assert_eq!(temp.raw_of("01a2")?, "{}");
         Ok(())
     }
 

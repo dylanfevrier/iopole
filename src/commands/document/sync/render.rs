@@ -34,6 +34,7 @@ fn millis(duration: SignedDuration) -> u64 {
 pub(super) fn report(
     out: &mut impl Write,
     retrieved: &[(Direction, usize)],
+    updated: Option<usize>,
     truncated_windows: usize,
 ) -> Result<()> {
     let total: usize = retrieved.iter().map(|(_, inserted)| inserted).sum();
@@ -42,6 +43,9 @@ pub(super) fn report(
         write!(out, " {inserted} {}.", direction.as_str().to_lowercase())?;
     }
     writeln!(out)?;
+    if let Some(updated) = updated {
+        writeln!(out, "{updated} invoices updated.")?;
+    }
     if truncated_windows > 0 {
         writeln!(
             out,
@@ -57,7 +61,7 @@ mod tests {
 
     fn reported(retrieved: &[(Direction, usize)], truncated_windows: usize) -> String {
         let mut out = Vec::new();
-        report(&mut out, retrieved, truncated_windows)
+        report(&mut out, retrieved, None, truncated_windows)
             .unwrap_or_else(|err| panic!("cannot render: {err}"));
         String::from_utf8_lossy(&out).into_owned()
     }

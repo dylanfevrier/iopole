@@ -33,15 +33,18 @@ pub(crate) fn execute<S: InvoiceSearch>(
     let mut progress = ProgressBar::new(directions.iter().map(|_| period.duration()).sum());
 
     let mut retrieved = Vec::with_capacity(directions.len());
+    let mut updated = 0;
     let mut truncated_windows = 0;
     for &direction in directions {
-        let report = synchronizer.sync(direction, period, &mut progress)?;
+        let report = synchronizer.sync(direction, period, args.mode(), &mut progress)?;
         retrieved.push((direction, report.inserted));
+        updated += report.updated;
         truncated_windows += report.truncated_windows;
     }
     progress.finish();
 
-    render::report(out, &retrieved, truncated_windows)
+    let updated = args.refresh.then_some(updated);
+    render::report(out, &retrieved, updated, truncated_windows)
 }
 
 #[cfg(test)]
@@ -87,6 +90,7 @@ mod tests {
             from: from.parse()?,
             to: Some(to.parse()?),
             direction,
+            refresh: false,
         })
     }
 
@@ -164,6 +168,33 @@ mod tests {
         let output = sync(&path, &keys, &both, invoices())?;
 
         assert_eq!(output, "0 invoices retrieved. 0 inbound. 0 outbound.\n");
+        Ok(())
+    }
+
+    #[test]
+    fn refresh_rewrites_what_changed_and_tells_how_many() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        let keys = InMemoryKeyStore::default();
+        sync(
+            &path,
+            &keys,
+            &september_first(DirectionFilter::Both)?,
+            invoices(),
+        )?;
+        let mut changed = invoices();
+        changed[0].amount = Some("72".to_owned());
+        let refresh = Args {
+            refresh: true,
+            ..september_first(DirectionFilter::Both)?
+        };
+
+        let output = sync(&path, &keys, &refresh, changed)?;
+
+        assert_eq!(
+            output,
+            "0 invoices retrieved. 0 inbound. 0 outbound.\n1 invoices updated.\n"
+        );
         Ok(())
     }
 

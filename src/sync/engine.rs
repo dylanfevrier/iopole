@@ -5,7 +5,7 @@ use jiff::SignedDuration;
 use super::coverage::gaps;
 use super::store::{InvoiceStore, RangeStatus, WindowBatch};
 use super::window::TimeWindow;
-use super::{Progress, SyncConfig};
+use super::{Progress, SyncConfig, SyncMode};
 use crate::Result;
 use crate::clock::Clock;
 use crate::invoice::{Direction, Invoice};
@@ -55,10 +55,15 @@ impl<'a, S: InvoiceSearch, St: InvoiceStore, C: Clock> Synchronizer<'a, S, St, C
         &mut self,
         direction: Direction,
         requested: TimeWindow,
+        mode: SyncMode,
         progress: &mut impl Progress,
     ) -> Result<SyncReport> {
         let mut report = SyncReport::default();
-        let gaps = gaps(requested, &self.store.covered(direction)?);
+        let covered = match mode {
+            SyncMode::FillGaps => self.store.covered(direction)?,
+            SyncMode::Refresh => Vec::new(),
+        };
+        let gaps = gaps(requested, &covered);
         let missing = gaps
             .iter()
             .fold(SignedDuration::ZERO, |total, gap| total + gap.duration());
@@ -82,7 +87,7 @@ impl<'a, S: InvoiceSearch, St: InvoiceStore, C: Clock> Synchronizer<'a, S, St, C
                     None => (RangeStatus::Truncated, invoices),
                 },
             };
-            self.commit(direction, window, status, &invoices, &mut report)?;
+            self.commit(direction, window, status, mode, &invoices, &mut report)?;
             progress.advance(window.duration());
         }
         Ok(report)
@@ -132,6 +137,7 @@ impl<'a, S: InvoiceSearch, St: InvoiceStore, C: Clock> Synchronizer<'a, S, St, C
         direction: Direction,
         window: TimeWindow,
         status: RangeStatus,
+        mode: SyncMode,
         invoices: &[Invoice],
         report: &mut SyncReport,
     ) -> Result<()> {
@@ -139,6 +145,7 @@ impl<'a, S: InvoiceSearch, St: InvoiceStore, C: Clock> Synchronizer<'a, S, St, C
             direction,
             window,
             status,
+            mode,
             invoices,
             synced_at: self.clock.now(),
         })?;
@@ -204,10 +211,22 @@ mod tests {
         requested: TimeWindow,
         clock: &FixedClock,
     ) -> Result<SyncReport> {
+        run_in(search, temp, config, requested, clock, SyncMode::FillGaps)
+    }
+
+    fn run_in(
+        search: &mut FakeSearch,
+        temp: &mut TempStore,
+        config: SyncConfig,
+        requested: TimeWindow,
+        clock: &FixedClock,
+        mode: SyncMode,
+    ) -> Result<SyncReport> {
         let mut progress = RecordedProgress::default();
         let report = Synchronizer::new(search, &mut temp.store, clock, config).sync(
             Direction::Inbound,
             requested,
+            mode,
             &mut progress,
         )?;
         assert_eq!(progress.0, requested.duration(), "progress must reach 100%");
@@ -324,6 +343,37 @@ mod tests {
 
         assert_eq!((report.inserted, report.updated), (0, 1));
         assert_eq!(temp.status_of(&id)?.state, "DELIVERED");
+        Ok(())
+    }
+
+    #[test]
+    fn refresh_searches_a_covered_period_again_and_rewrites_what_changed() -> Result<()> {
+        let mut temp = TempStore::new()?;
+        let mut search = FakeSearch::with(vec![
+            inbound("2026-09-01T12:00:00Z", 1),
+            inbound("2026-09-02T12:00:00Z", 2),
+        ]);
+        let requested = window("2026-09-01T00:00:00Z", "2026-09-05T00:00:00Z");
+        run(&mut search, &mut temp, SyncConfig::default(), requested)?;
+        search.queries.clear();
+        search.invoices[0].raw = r#"{"changed":true}"#.to_owned();
+
+        let report = run_in(
+            &mut search,
+            &mut temp,
+            SyncConfig::default(),
+            requested,
+            &later(),
+            SyncMode::Refresh,
+        )?;
+
+        assert_ne!(
+            search.queries.len(),
+            0,
+            "covered ranges must be searched again"
+        );
+        assert_eq!((report.inserted, report.updated), (0, 1));
+        assert_eq!(temp.raw_of(&search.invoices[0].id)?, r#"{"changed":true}"#);
         Ok(())
     }
 
