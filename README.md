@@ -56,9 +56,10 @@ When nothing matches, it suggests the `document sync` command to run.
 ### Entity search
 
 `entity search` asks Iopole, live, which of the operator's business entities
-have the given identifier value (SIREN, SIRET, BCE...), and shows their name,
-company UID, legal identifier, country and network registrations. It tells
-when the company is not registered.
+have the given identifier value (SIREN, SIRET, BCE...). It shows them like
+`directory french` does, with the company UID and the country, and the date
+each address is available since on every network. It tells when the company is
+not registered.
 
 ### French directory
 
@@ -77,10 +78,10 @@ wildcard (`--name "BVS RENO*"`). Platform details are requested
 (`withPlatformDetails`). Each entry shows:
 
 ```
-Name:        MUCHA CONCIERGERIE
-Type:        Office (PRIMARY)
-Legal unit:  MADAME FLORIA DJOMO-NDJILO (SIREN 944870435)
-Address:     62 RUE DANIELLE CASANOVA, 93200 SAINT-DENIS
+Name:         MUCHA CONCIERGERIE
+Type:         Office (PRIMARY)
+Legal unit:   MADAME FLORIA DJOMO-NDJILO (SIREN 944870435)
+Address:      62 RUE DANIELLE CASANOVA, 93200 SAINT-DENIS
 
 TYPE               IDENTIFIER           NETWORK
 OFFICE_IDENTIFIER  0009:94487043500012  -
@@ -88,7 +89,7 @@ OFFICE_IDENTIFIER  0009:94487043500012  -
 
 Entries are separated by a line of `=`. An identifier registered on several
 networks takes one row per network. A column
-empty on every row, such as `VALID FROM` when the directory omits that date,
+empty on every row, such as `AVAILABLE SINCE` when the directory omits that date,
 is left out.
 
 The directory does

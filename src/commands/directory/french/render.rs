@@ -1,20 +1,12 @@
 use std::fmt;
 use std::io::Write;
-use std::mem;
 
 use crate::Result;
-use crate::iopole::{DirectoryEntry, DirectoryEntryType, PostalAddress};
-use crate::render::{self, Fields, MISSING, Table};
+use crate::commands::business_entity;
+use crate::iopole::{DirectoryEntry, PostalAddress};
+use crate::render::{self, Fields};
 
 const UNNAMED: &str = "(unnamed)";
-const LABELS: [&str; 4] = ["Name", "Type", "Legal unit", "Address"];
-const IDENTIFIER_COLUMNS: [&str; 5] = [
-    "TYPE",
-    "IDENTIFIER",
-    "NETWORK",
-    "DIRECTORY ADDRESS",
-    "VALID FROM",
-];
 
 /// `next_offset` is set when more entries may follow, the directory not
 /// telling how many match beyond the page.
@@ -45,30 +37,20 @@ struct Entry<'a>(&'a DirectoryEntry);
 impl fmt::Display for Entry<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let entry = self.0;
-        let mut fields = Fields::aligned_on(&LABELS);
+        let mut fields = Fields::default();
         fields.push("Name", entry.name.as_deref().unwrap_or(UNNAMED));
-        fields.push("Type", kind(entry));
+        fields.push(
+            "Type",
+            business_entity::kind(entry.entry_type.as_deref(), entry.scope.as_deref()),
+        );
         fields.push_some("Legal unit", legal_unit(entry));
         fields.push_some("Address", entry.postal_address.as_ref().and_then(one_line));
         writeln!(f, "{fields}")?;
         if entry.identifiers.is_empty() {
             writeln!(f, "No identifier.")
         } else {
-            write!(f, "{}", identifiers(entry))
+            write!(f, "{}", business_entity::identifiers(&entry.identifiers))
         }
-    }
-}
-
-fn kind(entry: &DirectoryEntry) -> String {
-    let code = entry.entry_type.as_deref();
-    let label = match code.and_then(DirectoryEntryType::from_code) {
-        Some(DirectoryEntryType::LegalUnit) => "Legal unit",
-        Some(DirectoryEntryType::Office) => "Office",
-        None => code.unwrap_or(MISSING),
-    };
-    match &entry.scope {
-        Some(scope) => format!("{label} ({scope})"),
-        None => label.to_owned(),
     }
 }
 
@@ -107,36 +89,6 @@ fn non_blank(value: Option<&str>) -> Option<&str> {
     value.map(str::trim).filter(|value| !value.is_empty())
 }
 
-fn identifiers(entry: &DirectoryEntry) -> Table {
-    let mut table = Table::new(&IDENTIFIER_COLUMNS);
-    for identifier in &entry.identifiers {
-        let value = identifier.value.as_deref().unwrap_or(MISSING);
-        let mut kind = cell(identifier.identifier_type.as_deref());
-        let mut id = match &identifier.scheme {
-            Some(scheme) => format!("{scheme}:{value}"),
-            None => value.to_owned(),
-        };
-        if identifier.network_registered.is_empty() {
-            table.push([kind, id, MISSING.to_owned()]);
-            continue;
-        }
-        for network in &identifier.network_registered {
-            table.push([
-                mem::take(&mut kind),
-                mem::take(&mut id),
-                cell(network.network_identifier.as_deref()),
-                cell(network.directory_address.as_deref()),
-                network.valid_from.clone().unwrap_or_default(),
-            ]);
-        }
-    }
-    table
-}
-
-fn cell(value: Option<&str>) -> String {
-    value.unwrap_or(MISSING).to_owned()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,10 +105,10 @@ mod tests {
         assert_eq!(
             rendered(&[legal_unit_with_suffix()], None),
             "\
-Name:        Legal unit Example 2
-Type:        Legal unit (PRIVATE_TAX_PAYER)
+Name:         Legal unit Example 2
+Type:         Legal unit (PRIVATE_TAX_PAYER)
 
-TYPE              IDENTIFIER      NETWORK      DIRECTORY ADDRESS        VALID FROM
+TYPE              IDENTIFIER      NETWORK      DIRECTORY ADDRESS        AVAILABLE SINCE
 LEGAL_IDENTIFIER  0002:009460134  -
 SUFFIX            0000:SUFFIX_A   DOMESTIC_FR  0225:009460134_SUFFIX_A  2025-08-10
 "
@@ -168,12 +120,12 @@ SUFFIX            0000:SUFFIX_A   DOMESTIC_FR  0225:009460134_SUFFIX_A  2025-08-
         assert_eq!(
             rendered(&[office_with_routing_code()], None),
             "\
-Name:        Office 2
-Type:        Office (SECONDARY)
-Legal unit:  Legal unit Example 1 (SIREN 007350101)
-Address:     150 RUE DU TEST, 66000 CITY
+Name:         Office 2
+Type:         Office (SECONDARY)
+Legal unit:   Legal unit Example 1 (SIREN 007350101)
+Address:      150 RUE DU TEST, 66000 CITY
 
-TYPE               IDENTIFIER           NETWORK      DIRECTORY ADDRESS                       VALID FROM
+TYPE               IDENTIFIER           NETWORK      DIRECTORY ADDRESS                       AVAILABLE SINCE
 OFFICE_IDENTIFIER  0009:00735010100083  DOMESTIC_FR  0225:007350101_00735010100083           2025-08-10
 ROUTING_CODE       0224:ServiceA        DOMESTIC_FR  0225:007350101_00735010100083_ServiceA  2025-08-10
 "
@@ -210,8 +162,8 @@ SUFFIX            0000:SUFFIX_A   DOMESTIC_FR           0225:009460134_SUFFIX_A 
         assert_eq!(
             rendered(&[entry], None),
             "\
-Name:        Office 2
-Type:        Office
+Name:         Office 2
+Type:         Office
 
 TYPE               IDENTIFIER           NETWORK
 OFFICE_IDENTIFIER  0009:00735010100083  -
@@ -227,7 +179,7 @@ OFFICE_IDENTIFIER  0009:00735010100083  -
 
         assert!(
             rendered(&[entry], None)
-                .contains("Type:        PUBLIC_BODY (PRIVATE_TAX_PAYER)\n\nNo identifier.\n")
+                .contains("Type:         PUBLIC_BODY (PRIVATE_TAX_PAYER)\n\nNo identifier.\n")
         );
     }
 

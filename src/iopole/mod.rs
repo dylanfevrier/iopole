@@ -9,7 +9,7 @@ mod uuid_bound;
 #[cfg(test)]
 pub(crate) mod testing;
 
-pub(crate) use business_entity::BusinessEntity;
+pub(crate) use business_entity::{BusinessEntity, EntityIdentifier};
 pub(crate) use french_directory::{
     DirectoryEntry, DirectoryEntryType, DirectoryPage, DirectoryQuery, PostalAddress,
 };

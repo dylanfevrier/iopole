@@ -74,7 +74,7 @@ mod tests {
 
         let output = run(&mut directory, &args())?;
 
-        assert!(output.starts_with("Name:        Legal unit Example 2\n"));
+        assert!(output.starts_with("Name:         Legal unit Example 2\n"));
         assert!(!output.contains("More may match"));
         Ok(())
     }

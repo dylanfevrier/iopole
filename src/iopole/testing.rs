@@ -117,6 +117,8 @@ pub(crate) fn bvs_renovation() -> BusinessEntity {
     };
     BusinessEntity {
         name: some("BVS RENOVATION"),
+        entity_type: some("LEGAL_UNIT"),
+        scope: some("PRIVATE_TAX_PAYER"),
         country: some("FR"),
         operator_relation: Some(OperatorRelation {
             data: Some(OperatorRelationData {

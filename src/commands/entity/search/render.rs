@@ -2,12 +2,11 @@ use std::fmt;
 use std::io::Write;
 
 use crate::Result;
+use crate::commands::business_entity;
 use crate::iopole::BusinessEntity;
-use crate::render::{self, Fields, MISSING, Table};
+use crate::render::{self, Fields, MISSING};
 
 const UNNAMED: &str = "(unnamed)";
-const LABELS: [&str; 4] = ["Name", "Company UID", "Legal identifier", "Country"];
-const NETWORK_COLUMNS: [&str; 3] = ["NETWORK", "DIRECTORY ADDRESS", "VALID FROM"];
 
 pub(super) fn entities(
     out: &mut impl Write,
@@ -27,46 +26,21 @@ struct Entity<'a>(&'a BusinessEntity);
 impl fmt::Display for Entity<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let entity = self.0;
-        let mut fields = Fields::aligned_on(&LABELS);
+        let mut fields = Fields::default();
         fields.push("Name", entity.name.as_deref().unwrap_or(UNNAMED));
-        fields.push("Company UID", entity.company_uid().unwrap_or(MISSING));
         fields.push(
-            "Legal identifier",
-            legal_identifier(entity).unwrap_or_else(|| MISSING.to_owned()),
+            "Type",
+            business_entity::kind(entity.entity_type.as_deref(), entity.scope.as_deref()),
         );
+        fields.push("Company UID", entity.company_uid().unwrap_or(MISSING));
         fields.push("Country", entity.country.as_deref().unwrap_or(MISSING));
         writeln!(f, "{fields}")?;
-
-        if entity.network_registrations().next().is_none() {
-            return writeln!(f, "No network registration.");
+        if entity.identifiers.is_empty() {
+            writeln!(f, "No identifier.")
+        } else {
+            write!(f, "{}", business_entity::identifiers(&entity.identifiers))
         }
-        write!(f, "{}", networks(entity))
     }
-}
-
-fn legal_identifier(entity: &BusinessEntity) -> Option<String> {
-    let identifier = entity.legal_identifier()?;
-    let value = identifier.value.as_deref()?;
-    Some(match &identifier.scheme {
-        Some(scheme) => format!("{scheme}:{value}"),
-        None => value.to_owned(),
-    })
-}
-
-fn networks(entity: &BusinessEntity) -> Table {
-    let mut table = Table::new(&NETWORK_COLUMNS);
-    for network in entity.network_registrations() {
-        table.push([
-            cell(network.network_identifier.as_deref()),
-            cell(network.directory_address.as_deref()),
-            network.valid_from.clone().unwrap_or_default(),
-        ]);
-    }
-    table
-}
-
-fn cell(value: Option<&str>) -> String {
-    value.unwrap_or(MISSING).to_owned()
 }
 
 #[cfg(test)]
@@ -85,14 +59,14 @@ mod tests {
         assert_eq!(
             rendered(&[bvs_renovation()]),
             "\
-Name:              BVS RENOVATION
-Company UID:       6071797
-Legal identifier:  0002:980217632
-Country:           FR
+Name:         BVS RENOVATION
+Type:         Legal unit (PRIVATE_TAX_PAYER)
+Company UID:  6071797
+Country:      FR
 
-NETWORK               DIRECTORY ADDRESS  VALID FROM
-PEPPOL_INTERNATIONAL  0225:980217632     2026-07-28
-DOMESTIC_FR           0225:980217632     2026-07-29
+TYPE              IDENTIFIER      NETWORK               DIRECTORY ADDRESS  AVAILABLE SINCE
+LEGAL_IDENTIFIER  0002:980217632  PEPPOL_INTERNATIONAL  0225:980217632     2026-07-28
+                                  DOMESTIC_FR           0225:980217632     2026-07-29
 "
         );
     }
@@ -106,12 +80,13 @@ DOMESTIC_FR           0225:980217632     2026-07-29
         assert_eq!(
             rendered(&[entity]),
             "\
-Name:              BVS RENOVATION
-Company UID:       -
-Legal identifier:  0002:980217632
-Country:           FR
+Name:         BVS RENOVATION
+Type:         Legal unit (PRIVATE_TAX_PAYER)
+Company UID:  -
+Country:      FR
 
-No network registration.
+TYPE              IDENTIFIER      NETWORK
+LEGAL_IDENTIFIER  0002:980217632  -
 "
         );
     }
@@ -124,13 +99,13 @@ No network registration.
         let output = rendered(&[bvs_renovation(), other]);
 
         assert!(output.contains(&format!(
-            "2026-07-29\n\n{}\n\nName:              BVS RENOVATION BIS\n",
+            "2026-07-29\n\n{}\n\nName:         BVS RENOVATION BIS\n",
             "=".repeat(64)
         )));
     }
 
     #[test]
-    fn hides_valid_from_when_omitted() {
+    fn hides_availability_when_omitted() {
         let mut entity = bvs_renovation();
         for network in &mut entity.identifiers[0].network_registered {
             network.valid_from = None;
@@ -138,9 +113,9 @@ No network registration.
 
         assert!(rendered(&[entity]).ends_with(
             "\
-NETWORK               DIRECTORY ADDRESS
-PEPPOL_INTERNATIONAL  0225:980217632
-DOMESTIC_FR           0225:980217632
+TYPE              IDENTIFIER      NETWORK               DIRECTORY ADDRESS
+LEGAL_IDENTIFIER  0002:980217632  PEPPOL_INTERNATIONAL  0225:980217632
+                                  DOMESTIC_FR           0225:980217632
 "
         ));
     }

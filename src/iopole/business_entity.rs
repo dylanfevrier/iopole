@@ -3,12 +3,14 @@ use serde::Deserialize;
 use crate::Result;
 
 const COMPANY_UID_HEADER: &str = "X-Company-UID";
-const LEGAL_IDENTIFIER: &str = "LEGAL_IDENTIFIER";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BusinessEntity {
     pub(crate) name: Option<String>,
+    #[serde(rename = "type")]
+    pub(crate) entity_type: Option<String>,
+    pub(crate) scope: Option<String>,
     pub(crate) country: Option<String>,
     pub(crate) operator_relation: Option<OperatorRelation>,
     #[serde(default)]
@@ -62,18 +64,6 @@ impl BusinessEntity {
             .iter()
             .find(|header| header.key.eq_ignore_ascii_case(COMPANY_UID_HEADER))
             .map(|header| header.value.as_str())
-    }
-
-    pub(crate) fn legal_identifier(&self) -> Option<&EntityIdentifier> {
-        self.identifiers
-            .iter()
-            .find(|identifier| identifier.identifier_type.as_deref() == Some(LEGAL_IDENTIFIER))
-    }
-
-    pub(crate) fn network_registrations(&self) -> impl Iterator<Item = &NetworkRegistration> {
-        self.identifiers
-            .iter()
-            .flat_map(|identifier| &identifier.network_registered)
     }
 }
 
@@ -155,8 +145,6 @@ mod tests {
 
         assert_eq!(entities, [BusinessEntity::default()]);
         assert_eq!(entities[0].company_uid(), None);
-        assert_eq!(entities[0].legal_identifier(), None);
-        assert_eq!(entities[0].network_registrations().count(), 0);
         Ok(())
     }
 

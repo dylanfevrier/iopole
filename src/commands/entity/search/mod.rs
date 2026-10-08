@@ -47,7 +47,7 @@ mod tests {
             &mut out,
         )?;
 
-        assert!(String::from_utf8_lossy(&out).starts_with("Name:              BVS RENOVATION\n"));
+        assert!(String::from_utf8_lossy(&out).starts_with("Name:         BVS RENOVATION\n"));
         Ok(())
     }
 

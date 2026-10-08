@@ -1,23 +1,16 @@
 use std::fmt;
 
+/// Fits `Company UID:` and two spaces, so that every command lines up alike;
+/// a longer label still keeps two spaces before its value.
+const LABEL_WIDTH: usize = 14;
 const GAP: usize = 2;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct Fields {
-    width: usize,
     lines: Vec<(&'static str, String)>,
 }
 
 impl Fields {
-    /// Takes every label a record may show, so that records missing some still line up.
-    pub(crate) fn aligned_on(labels: &[&str]) -> Self {
-        let longest = labels.iter().map(|label| label.chars().count()).max();
-        Self {
-            width: longest.unwrap_or(0) + ":".len() + GAP,
-            lines: Vec::new(),
-        }
-    }
-
     pub(crate) fn push(&mut self, label: &'static str, value: impl Into<String>) {
         self.lines.push((label, value.into()));
     }
@@ -31,9 +24,10 @@ impl Fields {
 
 impl fmt::Display for Fields {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let width = self.width;
         for (label, value) in &self.lines {
-            writeln!(f, "{:<width$}{value}", format!("{label}:"))?;
+            let label = format!("{label}:");
+            let width = LABEL_WIDTH.max(label.chars().count() + GAP);
+            writeln!(f, "{label:<width$}{value}")?;
         }
         Ok(())
     }
