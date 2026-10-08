@@ -69,7 +69,10 @@ fn cells(invoice: &InvoiceRow) -> [String; 9] {
         optional(&invoice.number),
         truncate(&optional(&invoice.seller_name)),
         truncate(&optional(&invoice.buyer_name)),
-        optional(&invoice.amount),
+        invoice
+            .amount
+            .as_deref()
+            .map_or_else(|| MISSING.to_owned(), amount),
         invoice.state.clone(),
         optional(&invoice.last_status_code),
     ]
@@ -80,6 +83,41 @@ fn date(created_at: &str) -> String {
         |_| created_at.chars().take(10).collect(),
         |instant| instant.strftime("%Y-%m-%d").to_string(),
     )
+}
+
+/// Always two decimals after a comma (`1250.5` reads `1250,50`), rounded half
+/// away from zero; an amount that is not a decimal number shows as received.
+fn amount(value: &str) -> String {
+    cents(value).map_or_else(
+        || value.to_owned(),
+        |(negative, cents)| {
+            let sign = if negative { "-" } else { "" };
+            format!("{sign}{},{:02}", cents / 100, cents % 100)
+        },
+    )
+}
+
+fn cents(value: &str) -> Option<(bool, u128)> {
+    let value = value.trim();
+    let (negative, unsigned) = match value.strip_prefix('-') {
+        Some(unsigned) => (true, unsigned),
+        None => (false, value.strip_prefix('+').unwrap_or(value)),
+    };
+    let (units, decimals) = unsigned.split_once('.').unwrap_or((unsigned, ""));
+    let digits = |part: &str| part.chars().all(|c| c.is_ascii_digit());
+    if units.is_empty() || !digits(units) || !digits(decimals) {
+        return None;
+    }
+    let mut decimals = decimals.bytes().map(|digit| u128::from(digit - b'0'));
+    let tenths = decimals.next().unwrap_or(0);
+    let hundredths = decimals.next().unwrap_or(0);
+    let round_up = decimals.next().is_some_and(|digit| digit >= 5);
+    let cents = units
+        .parse::<u128>()
+        .ok()?
+        .checked_mul(100)?
+        .checked_add(tenths * 10 + hundredths + u128::from(round_up))?;
+    Some((negative && cents > 0, cents))
 }
 
 fn truncate(name: &str) -> String {
@@ -142,12 +180,30 @@ mod tests {
             rendered(&page),
             "\
 ID                                    DATE        DIRECTION  NUMBER       SELLER  BUYER                            AMOUNT  STATE      STATUS
-0199a8f2-6b1c-7d3e-9f40-1a2b3c4d5e6f  2026-09-02  inbound    F-2026-0042  CCLS    LES RAVALEURS MANTOIS ET ASSO…  1250.00  DELIVERED  APPROVED
-0199a3c1-0e5d-7a21-8b77-6c5d4e3f2a10  2026-09-01  outbound   -            -       CCLS                                 60  PENDING    -
+0199a8f2-6b1c-7d3e-9f40-1a2b3c4d5e6f  2026-09-02  inbound    F-2026-0042  CCLS    LES RAVALEURS MANTOIS ET ASSO…  1250,00  DELIVERED  APPROVED
+0199a3c1-0e5d-7a21-8b77-6c5d4e3f2a10  2026-09-01  outbound   -            -       CCLS                              60,00  PENDING    -
 
 2 invoices found.
 "
         );
+    }
+
+    #[test]
+    fn amounts_have_two_decimals_after_a_comma() {
+        for (received, shown) in [
+            ("60", "60,00"),
+            ("12.5", "12,50"),
+            ("1250.00", "1250,00"),
+            ("0.07", "0,07"),
+            ("-3.4", "-3,40"),
+            ("19.995", "20,00"),
+            ("19.994", "19,99"),
+            ("-0.001", "0,00"),
+            ("n/a", "n/a"),
+            ("12,5", "12,5"),
+        ] {
+            assert_eq!(amount(received), shown, "for {received}");
+        }
     }
 
     #[test]
