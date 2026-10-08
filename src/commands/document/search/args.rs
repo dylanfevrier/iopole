@@ -46,6 +46,10 @@ pub(crate) struct Args {
     /// Print the invoices as Iopole returned them when synchronized
     #[arg(long)]
     pub(crate) json: bool,
+
+    /// Show the identifier value (SIREN, BCE...) before the name of the seller and the buyer
+    #[arg(long)]
+    pub(crate) identifiers: bool,
 }
 
 impl Args {
@@ -116,6 +120,7 @@ mod tests {
         assert_eq!(args.states, ["VALID", "DELIVERED", "PENDING"]);
         assert_eq!(args.role, None);
         assert_eq!(args.limit, 50);
+        assert!(!args.identifiers);
         assert!(!args.json);
         Ok(())
     }

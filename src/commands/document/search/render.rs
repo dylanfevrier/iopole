@@ -19,10 +19,10 @@ const COLUMNS: [&str; 9] = [
     "STATUS",
 ];
 
-pub(super) fn invoices(out: &mut impl Write, page: &Page) -> Result<()> {
+pub(super) fn invoices(out: &mut impl Write, page: &Page, identifiers: bool) -> Result<()> {
     let mut table = Table::new(&COLUMNS).align_right("AMOUNT");
     for invoice in &page.invoices {
-        table.push(cells(invoice));
+        table.push(cells(invoice, identifiers));
     }
     write!(out, "{table}")?;
 
@@ -60,15 +60,21 @@ pub(super) fn no_invoice(out: &mut impl Write, sync_command: &str) -> Result<()>
     Ok(())
 }
 
-fn cells(invoice: &InvoiceRow) -> [String; 9] {
+fn cells(invoice: &InvoiceRow, identifiers: bool) -> [String; 9] {
     let optional = |value: &Option<String>| value.clone().unwrap_or_else(|| MISSING.to_owned());
     [
         invoice.id.clone(),
         date(&invoice.created_at),
         invoice.direction.to_lowercase(),
         optional(&invoice.number),
-        truncate(&optional(&invoice.seller_name)),
-        truncate(&optional(&invoice.buyer_name)),
+        party(
+            invoice.seller_identifier.as_deref().filter(|_| identifiers),
+            invoice.seller_name.as_deref(),
+        ),
+        party(
+            invoice.buyer_identifier.as_deref().filter(|_| identifiers),
+            invoice.buyer_name.as_deref(),
+        ),
         invoice
             .amount
             .as_deref()
@@ -120,6 +126,17 @@ fn cents(value: &str) -> Option<(bool, u128)> {
     Some((negative && cents > 0, cents))
 }
 
+/// `identifier - name`, so that the identifier can be passed to
+/// `entity search`; only the name is truncated.
+fn party(identifier: Option<&str>, name: Option<&str>) -> String {
+    match (identifier, name) {
+        (Some(identifier), Some(name)) => format!("{identifier} - {}", truncate(name)),
+        (Some(identifier), None) => identifier.to_owned(),
+        (None, Some(name)) => truncate(name),
+        (None, None) => MISSING.to_owned(),
+    }
+}
+
 fn truncate(name: &str) -> String {
     if name.chars().count() <= NAME_WIDTH {
         name.to_owned()
@@ -134,8 +151,12 @@ mod tests {
     use super::*;
 
     fn rendered(page: &Page) -> String {
+        rendered_with(page, false)
+    }
+
+    fn rendered_with(page: &Page, identifiers: bool) -> String {
         let mut out = Vec::new();
-        invoices(&mut out, page).unwrap_or_else(|err| panic!("cannot render: {err}"));
+        invoices(&mut out, page, identifiers).unwrap_or_else(|err| panic!("cannot render: {err}"));
         String::from_utf8_lossy(&out).into_owned()
     }
 
@@ -147,7 +168,9 @@ mod tests {
             number: Some("F-2026-0042".to_owned()),
             amount: Some("1250.00".to_owned()),
             seller_name: Some("CCLS".to_owned()),
+            seller_identifier: Some("352862346".to_owned()),
             buyer_name: Some("LES RAVALEURS MANTOIS ET ASSOCIES DE LA VALLEE".to_owned()),
+            buyer_identifier: Some("517657334".to_owned()),
             state: "DELIVERED".to_owned(),
             last_status_code: Some("APPROVED".to_owned()),
             raw: "{}".to_owned(),
@@ -162,7 +185,9 @@ mod tests {
             number: None,
             amount: Some("60".to_owned()),
             seller_name: None,
+            seller_identifier: None,
             buyer_name: Some("CCLS".to_owned()),
+            buyer_identifier: Some("352862346".to_owned()),
             state: "PENDING".to_owned(),
             last_status_code: None,
             raw: "{}".to_owned(),
@@ -170,7 +195,7 @@ mod tests {
     }
 
     #[test]
-    fn prints_invoices_as_a_table() {
+    fn prints_invoices_as_a_table_with_names_only() {
         let page = Page {
             invoices: vec![delivered(), pending()],
             total: 2,
@@ -186,6 +211,32 @@ ID                                    DATE        DIRECTION  NUMBER       SELLER
 2 invoices found.
 "
         );
+    }
+
+    #[test]
+    fn shows_identifiers_before_names_on_demand() {
+        let page = Page {
+            invoices: vec![delivered(), pending()],
+            total: 2,
+        };
+
+        assert_eq!(
+            rendered_with(&page, true),
+            "\
+ID                                    DATE        DIRECTION  NUMBER       SELLER            BUYER                                        AMOUNT  STATE      STATUS
+0199a8f2-6b1c-7d3e-9f40-1a2b3c4d5e6f  2026-09-02  inbound    F-2026-0042  352862346 - CCLS  517657334 - LES RAVALEURS MANTOIS ET ASSO…  1250,00  DELIVERED  APPROVED
+0199a3c1-0e5d-7a21-8b77-6c5d4e3f2a10  2026-09-01  outbound   -            -                 352862346 - CCLS                              60,00  PENDING    -
+
+2 invoices found.
+"
+        );
+    }
+
+    #[test]
+    fn parties_show_whatever_is_known() {
+        assert_eq!(party(Some("0123456789"), None), "0123456789");
+        assert_eq!(party(None, Some("CCLS")), "CCLS");
+        assert_eq!(party(None, None), "-");
     }
 
     #[test]

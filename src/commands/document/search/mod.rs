@@ -28,7 +28,7 @@ pub(crate) fn execute(
     if page.total == 0 {
         return render::no_invoice(out, &args.sync_command());
     }
-    render::invoices(out, &page)
+    render::invoices(out, &page, args.identifiers)
 }
 
 #[cfg(test)]
@@ -50,6 +50,7 @@ mod tests {
             to: None,
             limit: 50,
             json: false,
+            identifiers: false,
         }
     }
 

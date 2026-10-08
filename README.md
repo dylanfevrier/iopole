@@ -51,8 +51,12 @@ finds `0208:0123456789`. Without it, the search covers every company, and
 
 ```sh
 cargo run -- document search [352862346 [--role seller|buyer]] [--direction inbound|outbound|both] \
-    [--state VALID,DELIVERED] [--status REJECTED] [--from 2026-09-01] [--to 2026-10-01] [--limit 50]
+    [--state VALID,DELIVERED] [--status REJECTED] [--from 2026-09-01] [--to 2026-10-01] [--limit 50] \
+    [--identifiers]
 ```
+
+`--identifiers` shows the seller and the buyer as `352862346 - CCLS`, so that
+the identifier can be passed to `entity search`.
 
 When nothing matches, it suggests the `document sync` command to run.
 

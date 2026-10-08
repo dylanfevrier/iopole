@@ -32,7 +32,10 @@ pub(crate) struct InvoiceRow {
     pub(crate) number: Option<String>,
     pub(crate) amount: Option<String>,
     pub(crate) seller_name: Option<String>,
+    /// Value of the electronic address, without its scheme (SIREN, BCE...).
+    pub(crate) seller_identifier: Option<String>,
     pub(crate) buyer_name: Option<String>,
+    pub(crate) buyer_identifier: Option<String>,
     pub(crate) state: String,
     pub(crate) last_status_code: Option<String>,
     /// The invoice as Iopole returned it when synchronized.
@@ -49,7 +52,8 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
     let (conditions, params) = conditions(filter);
     let sql = format!(
         "SELECT invoice_id, direction, created_at, number, amount, seller_name, buyer_name,
-                state, last_status_code, raw, count(*) OVER ()
+                state, last_status_code, raw, seller_identifier, buyer_identifier,
+                count(*) OVER ()
          FROM invoice {} ORDER BY invoice_id DESC LIMIT {}",
         where_clause(&conditions),
         filter.limit,
@@ -59,7 +63,7 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
     let mut statement = connection.prepare(&sql)?;
     let mut rows = statement.query(params_from_iter(params))?;
     while let Some(row) = rows.next()? {
-        page.total = usize::try_from(row.get::<_, i64>(10)?).unwrap_or_default();
+        page.total = usize::try_from(row.get::<_, i64>(12)?).unwrap_or_default();
         page.invoices.push(InvoiceRow {
             id: row.get(0)?,
             direction: row.get(1)?,
@@ -67,7 +71,9 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
             number: row.get(3)?,
             amount: row.get(4)?,
             seller_name: row.get(5)?,
+            seller_identifier: row.get(10)?,
             buyer_name: row.get(6)?,
+            buyer_identifier: row.get(11)?,
             state: row.get(7)?,
             last_status_code: row.get(8)?,
             raw: row.get(9)?,
