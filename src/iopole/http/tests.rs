@@ -17,7 +17,7 @@ fn defaults_to_production_urls() {
         "https://auth.iopole.com/realms/iopole/protocol/openid-connect/token"
     );
     assert_eq!(
-        endpoints.search_url,
+        join(&endpoints.api_url, INVOICE_SEARCH_PATH),
         "https://api.iopole.com/v1.1/invoice/search"
     );
 }
@@ -35,8 +35,8 @@ fn urls_can_target_preproduction() {
         "https://auth.ppd.iopole.fr/realms/iopole/protocol/openid-connect/token"
     );
     assert_eq!(
-        endpoints.search_url,
-        "https://api.ppd.iopole.fr/v1.1/invoice/search"
+        join(&endpoints.api_url, BUSINESS_ENTITY_PATH),
+        "https://api.ppd.iopole.fr/v1/config/business/entity"
     );
 }
 

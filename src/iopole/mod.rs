@@ -1,4 +1,5 @@
 mod auth;
+mod business_entity;
 mod http;
 mod model;
 mod query;
@@ -7,6 +8,7 @@ mod uuid_bound;
 #[cfg(test)]
 pub(crate) mod testing;
 
+pub(crate) use business_entity::BusinessEntity;
 pub(crate) use http::{Endpoints, HttpClient};
 pub(crate) use query::SearchQuery;
 pub(crate) use uuid_bound::UuidBound;
@@ -19,4 +21,9 @@ pub(crate) const MAX_OFFSET: u32 = 1000;
 
 pub(crate) trait InvoiceSearch {
     fn search(&mut self, query: &SearchQuery, offset: u32, limit: u32) -> Result<Vec<Invoice>>;
+}
+
+pub(crate) trait BusinessEntityDirectory {
+    /// Business entities of the operator whose main identifier is `identifier_value`.
+    fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>>;
 }

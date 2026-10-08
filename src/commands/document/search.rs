@@ -6,7 +6,7 @@ use jiff::Timestamp;
 
 use crate::Result;
 use crate::catalog::{self, InvoiceFilter, InvoiceRow, Page, Role};
-use crate::cli::{DirectionFilter, RoleFilter, SearchArgs};
+use crate::cli::{DirectionFilter, DocumentSearchArgs, RoleFilter};
 use crate::database::{self, DatabaseKeyStore};
 use crate::iopole::UuidBound;
 
@@ -25,7 +25,7 @@ const HEADERS: [&str; 8] = [
 pub(crate) fn execute(
     database_path: &Path,
     keys: &impl DatabaseKeyStore,
-    args: &SearchArgs,
+    args: &DocumentSearchArgs,
     out: &mut impl Write,
 ) -> Result<()> {
     let filter = filter(args)?;
@@ -46,7 +46,7 @@ pub(crate) fn execute(
     render(&page, out)
 }
 
-fn sync_suggestion(args: &SearchArgs) -> String {
+fn sync_suggestion(args: &DocumentSearchArgs) -> String {
     let mut command = match args.from {
         Some(from) => format!("iopole document sync --from {from}"),
         None => "iopole document sync --from <date>".to_owned(),
@@ -62,7 +62,7 @@ fn sync_suggestion(args: &SearchArgs) -> String {
     command
 }
 
-fn filter(args: &SearchArgs) -> Result<InvoiceFilter> {
+fn filter(args: &DocumentSearchArgs) -> Result<InvoiceFilter> {
     Ok(InvoiceFilter {
         identifier_value: args.identifier_value.clone(),
         role: args.role.map(|role| match role {

@@ -23,6 +23,24 @@ pub enum Command {
         #[command(subcommand)]
         command: DocumentCommand,
     },
+    /// Work with the business entities registered with Iopole
+    Entity {
+        #[command(subcommand)]
+        command: EntityCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum EntityCommand {
+    /// Show whether a company is registered with Iopole, and how
+    Search(EntitySearchArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct EntitySearchArgs {
+    /// Identifier value of the business entity (SIREN, SIRET, BCE...), without its scheme
+    #[arg(value_parser = parse_identifier_value)]
+    pub identifier_value: String,
 }
 
 #[derive(Debug, Subcommand)]
@@ -30,7 +48,7 @@ pub enum DocumentCommand {
     /// Synchronize Iopole invoices into the local database
     Sync(SyncArgs),
     /// Search synchronized invoices of a company by its electronic address
-    Search(SearchArgs),
+    Search(DocumentSearchArgs),
 }
 
 #[derive(Debug, Args)]
@@ -49,7 +67,7 @@ pub struct SyncArgs {
 }
 
 #[derive(Debug, Args)]
-pub struct SearchArgs {
+pub struct DocumentSearchArgs {
     /// Electronic address value of the seller or the buyer, whatever its scheme
     /// (352862346 matches 0225:352862346 and 0002:352862346)
     #[arg(value_parser = parse_identifier_value)]

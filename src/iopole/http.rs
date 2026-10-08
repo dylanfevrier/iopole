@@ -5,8 +5,9 @@ use secrecy::ExposeSecret;
 use ureq::Agent;
 
 use super::auth::{AccessToken, TokenResponse};
+use super::business_entity::{BusinessEntity, identifier_query, parse_entities};
 use super::model::parse_page;
-use super::{InvoiceSearch, SearchQuery};
+use super::{BusinessEntityDirectory, InvoiceSearch, MAX_PAGE_LIMIT, SearchQuery};
 use crate::credentials::Credentials;
 use crate::invoice::Invoice;
 use crate::{Error, Result};
@@ -14,8 +15,9 @@ use crate::{Error, Result};
 const DEFAULT_AUTH_URL: &str = "https://auth.iopole.com";
 const DEFAULT_AUTH_ENDPOINT: &str = "realms/iopole/protocol/openid-connect/token";
 const DEFAULT_API_URL: &str = "https://api.iopole.com";
-const SEARCH_PATH: &str = "v1.1/invoice/search";
-const EXPAND: &str = "businessData,lastStatusData";
+const INVOICE_SEARCH_PATH: &str = "v1.1/invoice/search";
+const INVOICE_EXPAND: &str = "businessData,lastStatusData";
+const BUSINESS_ENTITY_PATH: &str = "v1/config/business/entity";
 
 /// The announced quota (1000/min) is shared with production einvoicing.
 const REQUESTS_PER_MINUTE: u32 = 300;
@@ -29,7 +31,7 @@ const ERROR_BODY_EXCERPT: usize = 200;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Endpoints {
     token_url: String,
-    search_url: String,
+    api_url: String,
 }
 
 impl Endpoints {
@@ -44,7 +46,7 @@ impl Endpoints {
                 &var("IOPOLE_AUTH_URL", DEFAULT_AUTH_URL),
                 &var("IOPOLE_AUTH_ENDPOINT", DEFAULT_AUTH_ENDPOINT),
             ),
-            search_url: join(&var("IOPOLE_PDP_URL", DEFAULT_API_URL), SEARCH_PATH),
+            api_url: var("IOPOLE_PDP_URL", DEFAULT_API_URL),
         }
     }
 }
@@ -110,23 +112,39 @@ impl HttpClient {
         Ok(token.into_token(issued_at))
     }
 
-    fn send_search(
+    /// Authenticated GET with retries; the body of a successful response.
+    fn get(&mut self, path: &str, query: &[(&str, String)]) -> Result<String> {
+        let url = join(&self.endpoints.api_url, path);
+        let mut attempts = Attempts::default();
+        loop {
+            let authorization = self.authorization()?;
+            self.pacer.wait();
+            let next = match self.send_get(&url, &authorization, query) {
+                Ok(reply) if (200..300).contains(&reply.status) => return Ok(reply.body),
+                Ok(reply) => attempts.after_reply(&reply)?,
+                Err(err) if is_transient(&err) => attempts.after_transient_failure(err)?,
+                Err(err) => return Err(err.into()),
+            };
+            match next {
+                Next::Reauthenticate => self.token = None,
+                Next::Wait(delay) => thread::sleep(delay),
+            }
+        }
+    }
+
+    fn send_get(
         &self,
+        url: &str,
         authorization: &str,
-        query: &SearchQuery,
-        offset: u32,
-        limit: u32,
+        query: &[(&str, String)],
     ) -> std::result::Result<Reply, ureq::Error> {
         let mut response = self
             .agent
-            .get(&self.endpoints.search_url)
+            .get(url)
             .header("Authorization", authorization)
             .header("customer-id", &self.credentials.customer_id)
             .header("Accept", "application/json")
-            .query("q", query.to_string())
-            .query("expand", EXPAND)
-            .query("offset", offset.to_string())
-            .query("limit", limit.to_string())
+            .query_pairs(query.iter().map(|(name, value)| (*name, value.as_str())))
             .call()?;
         Ok(Reply {
             status: response.status().as_u16(),
@@ -143,20 +161,33 @@ impl HttpClient {
 
 impl InvoiceSearch for HttpClient {
     fn search(&mut self, query: &SearchQuery, offset: u32, limit: u32) -> Result<Vec<Invoice>> {
-        let mut attempts = Attempts::default();
-        loop {
-            let authorization = self.authorization()?;
-            self.pacer.wait();
-            let next = match self.send_search(&authorization, query, offset, limit) {
-                Ok(reply) if (200..300).contains(&reply.status) => return parse_page(&reply.body),
-                Ok(reply) => attempts.after_reply(&reply)?,
-                Err(err) if is_transient(&err) => attempts.after_transient_failure(err)?,
-                Err(err) => return Err(err.into()),
-            };
-            match next {
-                Next::Reauthenticate => self.token = None,
-                Next::Wait(delay) => thread::sleep(delay),
-            }
+        let body = self.get(
+            INVOICE_SEARCH_PATH,
+            &[
+                ("q", query.to_string()),
+                ("expand", INVOICE_EXPAND.to_owned()),
+                ("offset", offset.to_string()),
+                ("limit", limit.to_string()),
+            ],
+        )?;
+        parse_page(&body)
+    }
+}
+
+impl BusinessEntityDirectory for HttpClient {
+    fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>> {
+        let reply = self.get(
+            BUSINESS_ENTITY_PATH,
+            &[
+                ("q", identifier_query(identifier_value)),
+                ("limit", MAX_PAGE_LIMIT.to_string()),
+            ],
+        );
+        match reply {
+            Ok(body) => parse_entities(&body),
+            // Documented answer when no entity matches the query.
+            Err(Error::UnexpectedStatus { status: 404, .. }) => Ok(Vec::new()),
+            Err(err) => Err(err),
         }
     }
 }

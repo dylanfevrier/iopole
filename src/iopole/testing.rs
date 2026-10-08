@@ -1,6 +1,10 @@
 use jiff::Timestamp;
 
-use super::{InvoiceSearch, SearchQuery};
+use super::business_entity::{
+    BusinessEntity, EntityIdentifier, Header, NetworkRegistration, OperatorRelation,
+    OperatorRelationData,
+};
+use super::{BusinessEntityDirectory, InvoiceSearch, SearchQuery};
 use crate::Result;
 use crate::invoice::{Invoice, Party, Status};
 
@@ -78,5 +82,58 @@ pub(crate) fn outbound(instant: &str, sequence: u16) -> Invoice {
     Invoice {
         direction: "OUTBOUND".to_owned(),
         ..inbound(instant, sequence)
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct FakeDirectory {
+    pub(crate) entities: Vec<BusinessEntity>,
+    pub(crate) searched: Vec<String>,
+}
+
+impl BusinessEntityDirectory for FakeDirectory {
+    fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>> {
+        self.searched.push(identifier_value.to_owned());
+        Ok(self
+            .entities
+            .iter()
+            .filter(|entity| {
+                entity
+                    .identifiers
+                    .iter()
+                    .any(|identifier| identifier.value.as_deref() == Some(identifier_value))
+            })
+            .cloned()
+            .collect())
+    }
+}
+
+pub(crate) fn bvs_renovation() -> BusinessEntity {
+    let some = |value: &str| Some(value.to_owned());
+    let network = |network: &str, valid_from: &str| NetworkRegistration {
+        network_identifier: some(network),
+        directory_address: some("0225:980217632"),
+        valid_from: some(valid_from),
+    };
+    BusinessEntity {
+        name: some("BVS RENOVATION"),
+        country: some("FR"),
+        operator_relation: Some(OperatorRelation {
+            data: Some(OperatorRelationData {
+                header: vec![Header {
+                    key: "X-Company-UID".to_owned(),
+                    value: "6071797".to_owned(),
+                }],
+            }),
+        }),
+        identifiers: vec![EntityIdentifier {
+            identifier_type: some("LEGAL_IDENTIFIER"),
+            scheme: some("0002"),
+            value: some("980217632"),
+            network_registered: vec![
+                network("PEPPOL_INTERNATIONAL", "2026-07-28"),
+                network("DOMESTIC_FR", "2026-07-29"),
+            ],
+        }],
     }
 }

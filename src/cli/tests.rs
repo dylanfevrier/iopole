@@ -89,3 +89,18 @@ fn search_rejects_identifier_with_scheme() {
     assert!(Cli::try_parse_from(["iopole", "document", "search", "0225:352862346"]).is_err());
     assert!(Cli::try_parse_from(["iopole", "document", "search", " "]).is_err());
 }
+
+#[test]
+fn entity_search_takes_an_identifier_value() -> Result<(), clap::Error> {
+    let cli = Cli::try_parse_from(["iopole", "entity", "search", "0114445670"])?;
+
+    let Command::Entity {
+        command: EntityCommand::Search(args),
+    } = cli.command
+    else {
+        panic!("expected entity search, got {:?}", cli.command);
+    };
+    assert_eq!(args.identifier_value, "0114445670");
+    assert!(Cli::try_parse_from(["iopole", "entity", "search", "0208:0114445670"]).is_err());
+    Ok(())
+}

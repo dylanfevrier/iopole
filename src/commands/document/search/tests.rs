@@ -4,8 +4,8 @@ use crate::database::testing::{InMemoryKeyStore, InvoiceRecord};
 
 const IDENTIFIER: &str = "352862346";
 
-fn args() -> SearchArgs {
-    SearchArgs {
+fn args() -> DocumentSearchArgs {
+    DocumentSearchArgs {
         identifier_value: IDENTIFIER.to_owned(),
         role: None,
         direction: DirectionFilter::Both,
@@ -39,7 +39,7 @@ impl Fixture {
         self.tmp.path().join("iopole.db")
     }
 
-    fn search(&self, args: &SearchArgs) -> Result<String> {
+    fn search(&self, args: &DocumentSearchArgs) -> Result<String> {
         let mut out = Vec::new();
         execute(&self.path(), &self.keys, args, &mut out)?;
         Ok(String::from_utf8_lossy(&out).into_owned())
@@ -95,7 +95,7 @@ DATE        DIRECTION  NUMBER       SELLER  BUYER                            AMO
 #[test]
 fn applies_filters() -> Result<()> {
     let fixture = Fixture::new(&[pending(), delivered()])?;
-    let pending_only = SearchArgs {
+    let pending_only = DocumentSearchArgs {
         states: vec!["PENDING".to_owned()],
         ..args()
     };
@@ -110,7 +110,7 @@ fn applies_filters() -> Result<()> {
 #[test]
 fn tells_when_results_are_truncated() -> Result<()> {
     let fixture = Fixture::new(&[pending(), delivered()])?;
-    let one = SearchArgs { limit: 1, ..args() };
+    let one = DocumentSearchArgs { limit: 1, ..args() };
 
     let output = fixture.search(&one)?;
 
@@ -121,7 +121,7 @@ fn tells_when_results_are_truncated() -> Result<()> {
 #[test]
 fn invites_to_sync_when_nothing_matches() -> Result<()> {
     let fixture = Fixture::new(&[delivered()])?;
-    let unknown = SearchArgs {
+    let unknown = DocumentSearchArgs {
         identifier_value: "000000000".to_owned(),
         ..args()
     };
@@ -136,7 +136,7 @@ fn invites_to_sync_when_nothing_matches() -> Result<()> {
 #[test]
 fn sync_invitation_reuses_the_searched_period_and_direction() -> Result<()> {
     let fixture = Fixture::new(&[])?;
-    let september = SearchArgs {
+    let september = DocumentSearchArgs {
         from: Some("2026-09-01T00:00:00Z".parse()?),
         to: Some("2026-10-01T00:00:00Z".parse()?),
         direction: DirectionFilter::Inbound,

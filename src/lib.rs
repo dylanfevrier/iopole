@@ -12,7 +12,10 @@ mod sync;
 
 use std::io::Write;
 
-pub use cli::{Cli, Command, DirectionFilter, DocumentCommand, RoleFilter, SearchArgs, SyncArgs};
+pub use cli::{
+    Cli, Command, DirectionFilter, DocumentCommand, DocumentSearchArgs, EntityCommand,
+    EntitySearchArgs, RoleFilter, SyncArgs,
+};
 pub use error::{Error, Result};
 
 use clock::SystemClock;
@@ -42,5 +45,13 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         Command::Document {
             command: DocumentCommand::Search(args),
         } => commands::document::search::execute(&database::default_path()?, &keyring, args, out),
+        Command::Entity {
+            command: EntityCommand::Search(args),
+        } => commands::entity::search::execute(
+            &keyring,
+            |credentials| HttpClient::new(Endpoints::from_env(), credentials),
+            args,
+            out,
+        ),
     }
 }

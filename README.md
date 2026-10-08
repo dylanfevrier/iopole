@@ -10,6 +10,7 @@ cargo run -- login
 cargo run -- logout
 cargo run -- document sync --from 2026-09-01 [--to 2026-10-01] [--direction inbound|outbound|both]
 cargo run -- document search 352862346
+cargo run -- entity search 352862346
 ```
 
 ### Document sync
@@ -50,6 +51,13 @@ cargo run -- document search 352862346 [--role seller|buyer] [--direction inboun
 ```
 
 When nothing matches, it suggests the `document sync` command to run.
+
+### Entity search
+
+`entity search` asks Iopole, live, which of the operator's business entities
+have the given identifier value (SIREN, SIRET, BCE...), and shows their name,
+company UID, legal identifier, country and network registrations. It tells
+when the company is not registered.
 
 ## Installation
 
