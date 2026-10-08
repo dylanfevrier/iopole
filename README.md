@@ -54,6 +54,9 @@ cargo run -- document search 352862346 [--role seller|buyer] [--direction inboun
 
 When nothing matches, it suggests the `document sync` command to run.
 
+`--json` prints the matching invoices as Iopole returned them when
+synchronized, pretty-printed, as a list (`[]` when nothing matches).
+
 ### Document status
 
 `document status` asks Iopole, live, for the status history of an invoice,

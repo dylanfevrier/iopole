@@ -163,6 +163,7 @@ pub(crate) mod testing {
         pub(crate) buyer_identifier: Option<&'a str>,
         pub(crate) state: &'a str,
         pub(crate) last_status_code: Option<&'a str>,
+        pub(crate) raw: &'a str,
     }
 
     impl Default for InvoiceRecord<'_> {
@@ -179,6 +180,7 @@ pub(crate) mod testing {
                 buyer_identifier: None,
                 state: "VALID",
                 last_status_code: None,
+                raw: "{}",
             }
         }
     }
@@ -189,7 +191,7 @@ pub(crate) mod testing {
                 "INSERT INTO invoice (invoice_id, direction, created_at, number, amount,
                                   seller_name, seller_identifier, buyer_name, buyer_identifier,
                                   state, last_status_code, raw, synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, '{}', '')",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, '')",
                 rusqlite::params![
                     self.id,
                     self.direction,
@@ -202,6 +204,7 @@ pub(crate) mod testing {
                     self.buyer_identifier,
                     self.state,
                     self.last_status_code,
+                    self.raw,
                 ],
             )?;
             Ok(())

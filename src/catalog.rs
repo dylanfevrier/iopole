@@ -33,6 +33,8 @@ pub(crate) struct InvoiceRow {
     pub(crate) buyer_name: Option<String>,
     pub(crate) state: String,
     pub(crate) last_status_code: Option<String>,
+    /// The invoice as Iopole returned it when synchronized.
+    pub(crate) raw: String,
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -45,7 +47,7 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
     let (conditions, params) = conditions(filter);
     let sql = format!(
         "SELECT invoice_id, direction, created_at, number, amount, seller_name, buyer_name,
-                state, last_status_code, count(*) OVER ()
+                state, last_status_code, raw, count(*) OVER ()
          FROM invoice WHERE {} ORDER BY invoice_id DESC LIMIT {}",
         conditions.join(" AND "),
         filter.limit,
@@ -55,7 +57,7 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
     let mut statement = connection.prepare(&sql)?;
     let mut rows = statement.query(params_from_iter(params))?;
     while let Some(row) = rows.next()? {
-        page.total = usize::try_from(row.get::<_, i64>(9)?).unwrap_or_default();
+        page.total = usize::try_from(row.get::<_, i64>(10)?).unwrap_or_default();
         page.invoices.push(InvoiceRow {
             id: row.get(0)?,
             direction: row.get(1)?,
@@ -66,6 +68,7 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
             buyer_name: row.get(6)?,
             state: row.get(7)?,
             last_status_code: row.get(8)?,
+            raw: row.get(9)?,
         });
     }
     Ok(page)

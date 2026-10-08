@@ -42,6 +42,10 @@ pub(crate) struct Args {
     /// Maximum number of invoices to show
     #[arg(long, default_value_t = 50)]
     pub(crate) limit: usize,
+
+    /// Print the invoices as Iopole returned them when synchronized
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 impl Args {
@@ -112,6 +116,7 @@ mod tests {
         assert_eq!(args.states, ["VALID", "DELIVERED", "PENDING"]);
         assert_eq!(args.role, None);
         assert_eq!(args.limit, 50);
+        assert!(!args.json);
         Ok(())
     }
 

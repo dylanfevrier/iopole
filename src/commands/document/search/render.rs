@@ -39,6 +39,18 @@ pub(super) fn invoices(out: &mut impl Write, page: &Page) -> Result<()> {
     Ok(())
 }
 
+/// The invoices as Iopole returned them when synchronized, pretty-printed.
+pub(super) fn json(out: &mut impl Write, page: &Page) -> Result<()> {
+    let invoices = page
+        .invoices
+        .iter()
+        .map(|invoice| serde_json::from_str(&invoice.raw))
+        .collect::<std::result::Result<Vec<serde_json::Value>, _>>()?;
+    serde_json::to_writer_pretty(&mut *out, &invoices)?;
+    writeln!(out)?;
+    Ok(())
+}
+
 pub(super) fn no_invoice(out: &mut impl Write, sync_command: &str) -> Result<()> {
     writeln!(out, "No invoice found.")?;
     writeln!(
@@ -100,6 +112,7 @@ mod tests {
             buyer_name: Some("LES RAVALEURS MANTOIS ET ASSOCIES DE LA VALLEE".to_owned()),
             state: "DELIVERED".to_owned(),
             last_status_code: Some("APPROVED".to_owned()),
+            raw: "{}".to_owned(),
         }
     }
 
@@ -114,6 +127,7 @@ mod tests {
             buyer_name: Some("CCLS".to_owned()),
             state: "PENDING".to_owned(),
             last_status_code: None,
+            raw: "{}".to_owned(),
         }
     }
 

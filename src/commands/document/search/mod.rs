@@ -22,6 +22,9 @@ pub(crate) fn execute(
     } else {
         Page::default()
     };
+    if args.json {
+        return render::json(out, &page);
+    }
     if page.total == 0 {
         return render::no_invoice(out, &args.sync_command());
     }
@@ -46,6 +49,7 @@ mod tests {
             from: None,
             to: None,
             limit: 50,
+            json: false,
         }
     }
 
@@ -133,6 +137,60 @@ mod tests {
         };
 
         assert!(fixture.search(&unknown)?.starts_with("No invoice found.\n"));
+        Ok(())
+    }
+
+    #[test]
+    fn prints_the_invoices_as_iopole_returned_them_with_json() -> Result<()> {
+        let fixture = Fixture::new(&[
+            InvoiceRecord {
+                raw: r#"{"invoiceId":"01a2","state":"DELIVERED"}"#,
+                ..delivered()
+            },
+            InvoiceRecord {
+                raw: r#"{"invoiceId":"01a1"}"#,
+                ..pending()
+            },
+        ])?;
+        let json = Args {
+            json: true,
+            ..args()
+        };
+
+        assert_eq!(
+            fixture.search(&json)?,
+            "\
+[
+  {
+    \"invoiceId\": \"01a2\",
+    \"state\": \"DELIVERED\"
+  },
+  {
+    \"invoiceId\": \"01a1\"
+  }
+]
+"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn prints_an_empty_list_with_json_when_nothing_matches() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let json = Args {
+            json: true,
+            ..args()
+        };
+        let mut out = Vec::new();
+
+        execute(
+            &tmp.path().join("iopole.db"),
+            &InMemoryKeyStore::default(),
+            &json,
+            &mut out,
+        )?;
+
+        assert_eq!(String::from_utf8_lossy(&out), "[]\n");
         Ok(())
     }
 
