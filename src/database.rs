@@ -108,7 +108,7 @@ fn migrate(connection: &mut Connection) -> Result<()> {
     Ok(())
 }
 
-fn create_private_dir(dir: &Path) -> std::io::Result<()> {
+pub(crate) fn create_private_dir(dir: &Path) -> std::io::Result<()> {
     let mut builder = DirBuilder::new();
     builder.recursive(true);
     #[cfg(unix)]

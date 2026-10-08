@@ -75,6 +75,10 @@ mod tests {
         fn delete(&self) -> Result<()> {
             unreachable!("credentials must not be deleted")
         }
+
+        fn location(&self) -> String {
+            unreachable!("credentials must not be located")
+        }
     }
 
     fn now() -> FixedClock {

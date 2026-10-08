@@ -17,10 +17,21 @@ cargo run -- entity update-claim 980217632 --company-uid 6071797 [--direction in
 cargo run -- directory french 352862346
 ```
 
+### Auth
+
+`auth login` asks for the Iopole client, secret and customer ID, and stores
+them in clear in `~/.config/iopole/secrets.json`, readable only by its owner
+(file `600`, directory `700`). The encryption key of the local database lives
+in the same file. Every command refuses to read the file once other users can
+read it.
+
+`auth logout` removes the credentials, the local database and its key; the file
+goes away with them.
+
 ### Document sync
 
 `document sync` stores the general information of Iopole invoices (never payment
-means) in an encrypted SQLite database whose key lives in the system keyring.
+means) in an encrypted SQLite database whose key lives in the secrets file.
 
 - Invoices are searched by ranges of their UUID v7 identifier, one day at a
   time; days holding more than the 1200 results a search returns are halved
@@ -177,22 +188,7 @@ entries, e.g. to debug or to pipe into `jq`.
 
 ```sh
 cargo install --path .
-scripts/sign.sh ~/.cargo/bin/iopole
 ```
-
-## Keychain access on macOS
-
-Secrets are stored in a single keychain entry, which macOS only lets the
-binary that created it read. Binaries built by cargo are signed ad hoc, so each
-rebuild looks like a new application and macOS asks for access again. Sign them
-with a stable identity to keep "Always Allow" across rebuilds:
-
-```sh
-scripts/create-signing-identity.sh
-```
-
-`cargo run` and `cargo test` then sign binaries automatically (see
-`.cargo/config.toml`); installed binaries are signed with `scripts/sign.sh`.
 
 ## Development
 

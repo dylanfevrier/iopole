@@ -7,8 +7,8 @@ mod database;
 mod error;
 mod invoice;
 mod iopole;
-mod keyring_store;
 mod render;
+mod secrets_file;
 mod sync;
 
 use std::io::Write;
@@ -20,23 +20,23 @@ use cli::Command;
 use clock::SystemClock;
 use commands::{auth, directory, document, entity};
 use iopole::{Endpoints, HttpClient};
-use keyring_store::KeyringStore;
+use secrets_file::SecretsFile;
 
 pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
-    let keyring = KeyringStore::default();
+    let secrets = SecretsFile::at(SecretsFile::default_path()?);
     match &cli.command {
         Command::Auth {
             command: auth::Command::Login,
-        } => auth::login::execute(&keyring, auth::login::prompt_credentials, out),
+        } => auth::login::execute(&secrets, auth::login::prompt_credentials, out),
         Command::Auth {
             command: auth::Command::Logout,
-        } => auth::logout::execute(&keyring, &database::default_path()?, &keyring, out),
+        } => auth::logout::execute(&secrets, &database::default_path()?, &secrets, out),
         Command::Document {
             command: document::Command::Sync(args),
         } => commands::document::sync::execute(
-            &keyring,
+            &secrets,
             &database::default_path()?,
-            &keyring,
+            &secrets,
             |credentials| HttpClient::new(Endpoints::from_env(), credentials),
             &SystemClock,
             args,
@@ -44,16 +44,16 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         ),
         Command::Document {
             command: document::Command::Search(args),
-        } => commands::document::search::execute(&database::default_path()?, &keyring, args, out),
+        } => commands::document::search::execute(&database::default_path()?, &secrets, args, out),
         Command::Document {
             command: document::Command::Stat(args),
-        } => commands::document::stat::execute(&database::default_path()?, &keyring, args, out),
+        } => commands::document::stat::execute(&database::default_path()?, &secrets, args, out),
         Command::Document {
             command: document::Command::Status(args),
         } => commands::document::status::execute(
-            &keyring,
+            &secrets,
             &database::default_path()?,
-            &keyring,
+            &secrets,
             |credentials| HttpClient::new(Endpoints::from_env(), credentials),
             args,
             out,
@@ -61,7 +61,7 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         Command::Entity {
             command: entity::Command::UpdateClaim(args),
         } => commands::entity::update_claim::execute(
-            &keyring,
+            &secrets,
             |credentials| HttpClient::new(Endpoints::from_env(), credentials),
             args,
             out,
@@ -69,7 +69,7 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         Command::Entity {
             command: entity::Command::Search(args),
         } => commands::entity::search::execute(
-            &keyring,
+            &secrets,
             |credentials| HttpClient::new(Endpoints::from_env(), credentials),
             args,
             out,
@@ -77,7 +77,7 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         Command::Directory {
             command: directory::Command::French(args),
         } => commands::directory::french::execute(
-            &keyring,
+            &secrets,
             |credentials| HttpClient::new(Endpoints::from_env(), credentials),
             args,
             out,

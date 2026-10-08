@@ -14,6 +14,8 @@ pub(crate) trait CredentialStore {
     fn load(&self) -> Result<Option<Credentials>>;
     fn save(&self, credentials: &Credentials) -> Result<()>;
     fn delete(&self) -> Result<()>;
+    /// Where the credentials are kept, for the user.
+    fn location(&self) -> String;
 }
 
 #[cfg(test)]
@@ -70,6 +72,10 @@ pub(crate) mod testing {
         fn delete(&self) -> Result<()> {
             self.saved.borrow_mut().take();
             Ok(())
+        }
+
+        fn location(&self) -> String {
+            "memory".to_owned()
         }
     }
 }

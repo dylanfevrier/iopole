@@ -34,7 +34,7 @@ pub(crate) fn execute(
     }
 
     store.save(&prompt()?)?;
-    writeln!(out, "Credentials stored in the system keyring.")?;
+    writeln!(out, "Credentials stored in {}.", store.location())?;
     Ok(())
 }
 
@@ -74,7 +74,7 @@ mod tests {
         );
         assert_eq!(
             String::from_utf8_lossy(&out),
-            "Credentials stored in the system keyring.\n"
+            "Credentials stored in memory.\n"
         );
         Ok(())
     }

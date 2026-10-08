@@ -11,8 +11,11 @@ pub enum Error {
     #[error("cannot read user input: {0}")]
     Prompt(#[from] dialoguer::Error),
 
-    #[error("cannot access system keyring: {0}")]
-    Keyring(#[from] keyring::Error),
+    #[error(
+        "{} is readable by other users; run `chmod 600` on it, or `iopole auth logout` then `iopole auth login`",
+        .0.display()
+    )]
+    ExposedSecrets(PathBuf),
 
     #[error("not logged in; run `iopole auth login` first")]
     NotLoggedIn,
@@ -27,12 +30,12 @@ pub enum Error {
     KeyGeneration(#[from] getrandom::Error),
 
     #[error(
-        "encryption key for {} is missing from the system keyring; delete the database and run `iopole document sync` again",
+        "encryption key for {} is missing from the secrets file; run `iopole auth logout` to delete the database, then log in and run `iopole document sync` again",
         .0.display()
     )]
     MissingDatabaseKey(PathBuf),
 
-    #[error("cannot decrypt {} with the key from the system keyring", .0.display())]
+    #[error("cannot decrypt {} with the key from the secrets file", .0.display())]
     InvalidDatabaseKey(PathBuf),
 
     #[error("database schema version {0} is newer than this tool supports")]
