@@ -36,6 +36,10 @@ pub(crate) trait BusinessEntityDirectory {
 pub(crate) trait InvoiceStatuses {
     /// `None` when Iopole does not know the invoice.
     fn status_history(&mut self, invoice_id: &str) -> Result<Option<Vec<StatusEvent>>>;
+
+    /// The history as Iopole returns it, `None` when Iopole does not know the
+    /// invoice.
+    fn raw_status_history(&mut self, invoice_id: &str) -> Result<Option<serde_json::Value>>;
 }
 
 pub(crate) trait FrenchDirectory {

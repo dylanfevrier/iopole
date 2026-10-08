@@ -5,6 +5,10 @@ pub(crate) struct Args {
     /// Iopole identifier of the invoice, as shown by `document search`
     #[arg(value_parser = parse_uuid)]
     pub(crate) invoice_id: String,
+
+    /// Print the history as Iopole returns it
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 fn parse_uuid(value: &str) -> Result<String, String> {
@@ -31,6 +35,15 @@ mod tests {
         let args = parse_args::<Args>(&["01A11587-E1D8-712D-8951-ED5072005067"])?;
 
         assert_eq!(args.invoice_id, "01a11587-e1d8-712d-8951-ed5072005067");
+        assert!(!args.json);
+        Ok(())
+    }
+
+    #[test]
+    fn json_is_an_option() -> Result<(), clap::Error> {
+        let args = parse_args::<Args>(&["01a11587-e1d8-712d-8951-ed5072005067", "--json"])?;
+
+        assert!(args.json);
         Ok(())
     }
 

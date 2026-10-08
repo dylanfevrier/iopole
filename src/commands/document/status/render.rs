@@ -39,6 +39,13 @@ pub(super) fn history(
     Ok(())
 }
 
+/// The history as Iopole returns it, pretty-printed.
+pub(super) fn json(out: &mut impl Write, history: &serde_json::Value) -> Result<()> {
+    serde_json::to_writer_pretty(&mut *out, history)?;
+    writeln!(out)?;
+    Ok(())
+}
+
 pub(super) fn unknown_invoice(out: &mut impl Write, invoice_id: &str) -> Result<()> {
     writeln!(out, "Iopole knows no invoice {invoice_id}.")?;
     Ok(())

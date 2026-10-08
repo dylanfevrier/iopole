@@ -199,8 +199,22 @@ impl BusinessEntityDirectory for HttpClient {
 
 impl InvoiceStatuses for HttpClient {
     fn status_history(&mut self, invoice_id: &str) -> Result<Option<Vec<StatusEvent>>> {
+        self.status_history_body(invoice_id)?
+            .map(|body| parse_status_history(&body))
+            .transpose()
+    }
+
+    fn raw_status_history(&mut self, invoice_id: &str) -> Result<Option<serde_json::Value>> {
+        self.status_history_body(invoice_id)?
+            .map(|body| Ok(serde_json::from_str(&body)?))
+            .transpose()
+    }
+}
+
+impl HttpClient {
+    fn status_history_body(&mut self, invoice_id: &str) -> Result<Option<String>> {
         match self.get(&format!("v1/invoice/{invoice_id}/status-history"), &[]) {
-            Ok(body) => parse_status_history(&body).map(Some),
+            Ok(body) => Ok(Some(body)),
             Err(Error::UnexpectedStatus { status: 404, .. }) => Ok(None),
             Err(err) => Err(err),
         }

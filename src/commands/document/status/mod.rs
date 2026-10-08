@@ -21,7 +21,14 @@ pub(crate) fn execute<S: InvoiceStatuses>(
     out: &mut impl Write,
 ) -> Result<()> {
     let credentials = credentials.load()?.ok_or(Error::NotLoggedIn)?;
-    let Some(history) = connect(credentials).status_history(&args.invoice_id)? else {
+    let mut statuses = connect(credentials);
+    if args.json {
+        return match statuses.raw_status_history(&args.invoice_id)? {
+            Some(history) => render::json(out, &history),
+            None => render::unknown_invoice(out, &args.invoice_id),
+        };
+    }
+    let Some(history) = statuses.status_history(&args.invoice_id)? else {
         return render::unknown_invoice(out, &args.invoice_id);
     };
     let synchronized = synchronized_parties(database_path, keys, &args.invoice_id)?;
@@ -53,6 +60,7 @@ mod tests {
     fn args() -> Args {
         Args {
             invoice_id: INVOICE_ID.to_owned(),
+            json: false,
         }
     }
 
@@ -61,13 +69,22 @@ mod tests {
         keys: &InMemoryKeyStore,
         statuses: FakeStatuses,
     ) -> Result<String> {
+        run_with(database_path, keys, statuses, &args())
+    }
+
+    fn run_with(
+        database_path: &Path,
+        keys: &InMemoryKeyStore,
+        statuses: FakeStatuses,
+        args: &Args,
+    ) -> Result<String> {
         let mut out = Vec::new();
         execute(
             &InMemoryStore::logged_in(),
             database_path,
             keys,
             |_| statuses,
-            &args(),
+            args,
             &mut out,
         )?;
         Ok(String::from_utf8_lossy(&out).into_owned())
@@ -76,7 +93,36 @@ mod tests {
     fn known(history: Vec<crate::iopole::StatusEvent>) -> FakeStatuses {
         FakeStatuses {
             history: Some(history),
+            ..FakeStatuses::default()
         }
+    }
+
+    #[test]
+    fn prints_the_history_as_iopole_returns_it_with_json() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        let keys = InMemoryKeyStore::default();
+        let raw = serde_json::json!([{ "date": "2026-10-05T09:45:07.000Z" }]);
+
+        let output = run_with(
+            &path,
+            &keys,
+            FakeStatuses {
+                raw: Some(raw),
+                ..FakeStatuses::default()
+            },
+            &Args {
+                json: true,
+                ..args()
+            },
+        )?;
+
+        assert_eq!(
+            output,
+            "[\n  {\n    \"date\": \"2026-10-05T09:45:07.000Z\"\n  }\n]\n"
+        );
+        assert!(!path.exists());
+        Ok(())
     }
 
     #[test]
@@ -120,7 +166,7 @@ mod tests {
         let output = run(
             &tmp.path().join("iopole.db"),
             &InMemoryKeyStore::default(),
-            FakeStatuses { history: None },
+            FakeStatuses::default(),
         )?;
 
         assert_eq!(output, format!("Iopole knows no invoice {INVOICE_ID}.\n"));

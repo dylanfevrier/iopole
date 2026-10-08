@@ -76,6 +76,8 @@ DATE (UTC)           STATUS
   the statuses.
 - Iopole answers an unknown UUID with an empty history, as for an invoice
   without status.
+- `--json` prints the history as Iopole returns it, pretty-printed, without
+  reading the local database.
 
 ### Entity search
 

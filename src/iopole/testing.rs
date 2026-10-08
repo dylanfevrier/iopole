@@ -148,13 +148,19 @@ pub(crate) use super::french_directory::testing::{
     FakeFrenchDirectory, legal_unit_with_suffix, office_with_routing_code,
 };
 
+#[derive(Default)]
 pub(crate) struct FakeStatuses {
     pub(crate) history: Option<Vec<StatusEvent>>,
+    pub(crate) raw: Option<serde_json::Value>,
 }
 
 impl InvoiceStatuses for FakeStatuses {
     fn status_history(&mut self, _: &str) -> Result<Option<Vec<StatusEvent>>> {
         Ok(self.history.clone())
+    }
+
+    fn raw_status_history(&mut self, _: &str) -> Result<Option<serde_json::Value>> {
+        Ok(self.raw.clone())
     }
 }
 
