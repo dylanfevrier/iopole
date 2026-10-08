@@ -2,7 +2,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use secrecy::ExposeSecret;
-use ureq::Agent;
+use ureq::http::Response;
+use ureq::{Agent, Body, RequestBuilder};
 
 use super::auth::{AccessToken, TokenResponse};
 use super::business_entity::{
@@ -12,8 +13,8 @@ use super::french_directory::{DirectoryPage, DirectoryQuery, EMPTY_PAGE, parse_d
 use super::model::parse_page;
 use super::status_history::{StatusEvent, parse_status_history};
 use super::{
-    BusinessEntityDirectory, FrenchDirectory, InvoiceSearch, InvoiceStatuses, MAX_PAGE_LIMIT,
-    SearchQuery,
+    BusinessEntityDirectory, Claim, ClaimConfiguration, FrenchDirectory, InvoiceSearch,
+    InvoiceStatuses, MAX_PAGE_LIMIT, SearchQuery,
 };
 use crate::credentials::Credentials;
 use crate::invoice::Invoice;
@@ -122,11 +123,33 @@ impl HttpClient {
 
     fn get(&mut self, path: &str, query: &[(&str, String)]) -> Result<String> {
         let url = join(&self.endpoints.api_url, path);
+        self.send(|client, authorization| {
+            client
+                .authorized(client.agent.get(&url), authorization)
+                .query_pairs(query.iter().map(|(name, value)| (*name, value.as_str())))
+                .call()
+        })
+    }
+
+    /// Replacements are idempotent, so they are retried like reads.
+    fn put(&mut self, path: &str, body: &serde_json::Value) -> Result<String> {
+        let url = join(&self.endpoints.api_url, path);
+        self.send(|client, authorization| {
+            client
+                .authorized(client.agent.put(&url), authorization)
+                .send_json(body)
+        })
+    }
+
+    fn send(
+        &mut self,
+        request: impl Fn(&Self, &str) -> std::result::Result<Response<Body>, ureq::Error>,
+    ) -> Result<String> {
         let mut attempts = Attempts::default();
         loop {
             let authorization = self.authorization()?;
             self.pacer.wait();
-            let next = match self.send_get(&url, &authorization, query) {
+            let next = match request(self, &authorization).and_then(Reply::read) {
                 Ok(reply) if (200..300).contains(&reply.status) => return Ok(reply.body),
                 Ok(reply) => attempts.after_reply(&reply)?,
                 Err(err) if is_transient(&err) => attempts.after_transient_failure(err)?,
@@ -139,21 +162,17 @@ impl HttpClient {
         }
     }
 
-    fn send_get(
-        &self,
-        url: &str,
-        authorization: &str,
-        query: &[(&str, String)],
-    ) -> std::result::Result<Reply, ureq::Error> {
-        let mut response = self
-            .agent
-            .get(url)
+    fn authorized<B>(&self, request: RequestBuilder<B>, authorization: &str) -> RequestBuilder<B> {
+        request
             .header("Authorization", authorization)
             .header("customer-id", &self.credentials.customer_id)
             .header("Accept", "application/json")
-            .query_pairs(query.iter().map(|(name, value)| (*name, value.as_str())))
-            .call()?;
-        Ok(Reply {
+    }
+}
+
+impl Reply {
+    fn read(mut response: Response<Body>) -> std::result::Result<Self, ureq::Error> {
+        Ok(Self {
             status: response.status().as_u16(),
             retry_after: response
                 .headers()
@@ -236,6 +255,32 @@ impl HttpClient {
     }
 }
 
+impl ClaimConfiguration for HttpClient {
+    fn update_claim(&mut self, business_entity_id: &str, claim: &Claim) -> Result<()> {
+        let path = format!("{BUSINESS_ENTITY_PATH}/{business_entity_id}/claim");
+        match self.put(&path, &claim.body()) {
+            Ok(_) => Ok(()),
+            Err(Error::UnexpectedStatus { status: 404, code }) => {
+                Err(claim_refusal(business_entity_id, code))
+            }
+            Err(err) => Err(err),
+        }
+    }
+}
+
+/// Iopole answers every refusal of a claim update with a 404 and a code.
+fn claim_refusal(business_entity_id: &str, code: Option<String>) -> Error {
+    let id = business_entity_id.to_owned();
+    match code.as_deref() {
+        Some("BUSINESS_ENTITY_NOT_FOUND") => Error::UnknownBusinessEntity(id),
+        Some("BUSINESS_ENTITY_OPERATOR_RELATION_NOT_FOUND") => Error::UnclaimedBusinessEntity(id),
+        Some("BUSINESS_ENTITY_CLAIM_UPDATE_ACTIVE_REGISTRATION_CONFLICT") => {
+            Error::ActiveInboundRegistrations(id)
+        }
+        _ => Error::UnexpectedStatus { status: 404, code },
+    }
+}
+
 impl FrenchDirectory for HttpClient {
     fn search_french(
         &mut self,
@@ -284,7 +329,7 @@ struct Attempts {
 impl Attempts {
     fn after_reply(&mut self, reply: &Reply) -> Result<Next> {
         match reply.status {
-            400 => Err(Error::InvalidQuery(excerpt(&reply.body))),
+            400 => Err(Error::InvalidRequest(excerpt(&reply.body))),
             401 | 403 if !self.reauthenticated => {
                 self.reauthenticated = true;
                 Ok(Next::Reauthenticate)
@@ -413,6 +458,32 @@ mod tests {
     }
 
     #[test]
+    fn explains_the_documented_claim_refusals() {
+        let id = "0199b69f-fe32-701a-9604-617d13785726";
+        let refusal = |code: &str| claim_refusal(id, Some(code.to_owned()));
+
+        assert!(matches!(
+            refusal("BUSINESS_ENTITY_NOT_FOUND"),
+            Error::UnknownBusinessEntity(_)
+        ));
+        assert!(matches!(
+            refusal("BUSINESS_ENTITY_OPERATOR_RELATION_NOT_FOUND"),
+            Error::UnclaimedBusinessEntity(_)
+        ));
+        assert!(matches!(
+            refusal("BUSINESS_ENTITY_CLAIM_UPDATE_ACTIVE_REGISTRATION_CONFLICT"),
+            Error::ActiveInboundRegistrations(_)
+        ));
+        assert!(matches!(
+            claim_refusal(id, None),
+            Error::UnexpectedStatus {
+                status: 404,
+                code: None
+            }
+        ));
+    }
+
+    #[test]
     fn invalid_query_is_not_retried() {
         let mut attempts = Attempts::default();
         let reply = Reply {
@@ -421,7 +492,7 @@ mod tests {
         };
 
         assert!(
-            matches!(attempts.after_reply(&reply), Err(Error::InvalidQuery(body)) if body.contains("parse"))
+            matches!(attempts.after_reply(&reply), Err(Error::InvalidRequest(body)) if body.contains("parse"))
         );
     }
 

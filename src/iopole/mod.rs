@@ -1,5 +1,6 @@
 mod auth;
 mod business_entity;
+mod claim;
 mod french_directory;
 mod http;
 mod model;
@@ -11,6 +12,7 @@ mod uuid_bound;
 pub(crate) mod testing;
 
 pub(crate) use business_entity::{BusinessEntity, EntityIdentifier};
+pub(crate) use claim::Claim;
 pub(crate) use french_directory::{
     DirectoryEntry, DirectoryEntryType, DirectoryPage, DirectoryQuery, PostalAddress,
 };
@@ -34,6 +36,11 @@ pub(crate) trait BusinessEntityDirectory {
 
     /// The entities as Iopole returns them.
     fn find_raw(&mut self, identifier_value: &str) -> Result<Vec<serde_json::Value>>;
+}
+
+pub(crate) trait ClaimConfiguration {
+    /// Replaces the whole claim configuration of a business entity.
+    fn update_claim(&mut self, business_entity_id: &str, claim: &Claim) -> Result<()>;
 }
 
 pub(crate) trait InvoiceStatuses {

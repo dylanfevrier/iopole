@@ -52,8 +52,8 @@ pub enum Error {
     #[error("Iopole refused the access token (HTTP {0})")]
     Unauthorized(u16),
 
-    #[error("Iopole rejected the search query: {0}")]
-    InvalidQuery(String),
+    #[error("Iopole rejected the request: {0}")]
+    InvalidRequest(String),
 
     #[error("Iopole rate limit still exceeded after several waits")]
     RateLimited,
@@ -63,6 +63,28 @@ pub enum Error {
 
     #[error("unexpected Iopole response (HTTP {status}{})", .code.as_ref().map(|code| format!(", code {code}")).unwrap_or_default())]
     UnexpectedStatus { status: u16, code: Option<String> },
+
+    #[error("{0} is not registered with Iopole")]
+    UnregisteredIdentifier(String),
+
+    #[error(
+        "{identifier_value} matches {count} business entities; pass a more specific identifier, such as a SIRET"
+    )]
+    AmbiguousIdentifier {
+        identifier_value: String,
+        count: usize,
+    },
+
+    #[error("Iopole knows no business entity {0}")]
+    UnknownBusinessEntity(String),
+
+    #[error("business entity {0} is not claimed by this operator")]
+    UnclaimedBusinessEntity(String),
+
+    #[error(
+        "business entity {0} still has active inbound network registrations; it cannot be restricted to outbound"
+    )]
+    ActiveInboundRegistrations(String),
 
     #[error("invalid date: {0}")]
     InvalidDate(#[from] jiff::Error),

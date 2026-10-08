@@ -12,6 +12,7 @@ cargo run -- document sync --from 2026-09-01 [--to 2026-10-01] [--direction inbo
 cargo run -- document search 352862346
 cargo run -- document status 01a10b05-e3fd-74c8-b9cd-ce8e4c012777
 cargo run -- entity search 352862346
+cargo run -- entity update-claim 980217632 --company-uid 6071797 [--direction inbound|outbound|both]
 cargo run -- directory french 352862346
 ```
 
@@ -92,6 +93,20 @@ not registered.
 
 `--json` prints the matching entities as Iopole returns them, pretty-printed,
 as a list (`[]` when nothing matches).
+
+### Entity claim update
+
+`entity update-claim` replaces, live, how the operator claims one of its
+business entities. It finds the entity by its identifier value (SIREN, SIRET,
+BCE...) as `entity search` does, and refuses when none or several match:
+
+- `--company-uid` (required) is sent back by Iopole in the `X-Company-UID`
+  header of the webhooks about this entity.
+- `--direction` restricts the claim to one invoice flow; it covers both by
+  default.
+
+Iopole replaces the whole configuration: any other header, query or path
+parameter set on the claim is removed. It needs the `admin` role.
 
 ### French directory
 

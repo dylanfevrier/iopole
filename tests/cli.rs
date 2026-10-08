@@ -117,3 +117,12 @@ fn directory_french_rejects_malformed_criteria() {
             .stderr(predicate::str::contains(message));
     }
 }
+
+#[test]
+fn entity_update_claim_requires_a_company_uid() {
+    iopole()
+        .args(["entity", "update-claim", "980217632"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--company-uid"));
+}

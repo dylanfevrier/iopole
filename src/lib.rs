@@ -56,6 +56,14 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
             out,
         ),
         Command::Entity {
+            command: entity::Command::UpdateClaim(args),
+        } => commands::entity::update_claim::execute(
+            &keyring,
+            |credentials| HttpClient::new(Endpoints::from_env(), credentials),
+            args,
+            out,
+        ),
+        Command::Entity {
             command: entity::Command::Search(args),
         } => commands::entity::search::execute(
             &keyring,

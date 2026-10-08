@@ -8,9 +8,11 @@ use super::status_history::{
     DocumentReference, RoleCode, StatusCode, StatusEvent, StatusMessage, StatusParty,
     StatusResponse,
 };
-use super::{BusinessEntityDirectory, InvoiceSearch, InvoiceStatuses, SearchQuery};
-use crate::Result;
+use super::{
+    BusinessEntityDirectory, Claim, ClaimConfiguration, InvoiceSearch, InvoiceStatuses, SearchQuery,
+};
 use crate::invoice::{Invoice, Party, Status};
+use crate::{Error, Result};
 
 #[derive(Default)]
 pub(crate) struct FakeSearch {
@@ -118,6 +120,8 @@ impl BusinessEntityDirectory for FakeDirectory {
     }
 }
 
+pub(crate) const BVS_RENOVATION_ID: &str = "0199b69f-fe32-701a-9604-617d13785726";
+
 pub(crate) fn bvs_renovation() -> BusinessEntity {
     let some = |value: &str| Some(value.to_owned());
     let network = |network: &str, valid_from: &str| NetworkRegistration {
@@ -126,6 +130,7 @@ pub(crate) fn bvs_renovation() -> BusinessEntity {
         valid_from: some(valid_from),
     };
     BusinessEntity {
+        id: some(BVS_RENOVATION_ID),
         name: some("BVS RENOVATION"),
         entity_type: some("LEGAL_UNIT"),
         scope: some("PRIVATE_TAX_PAYER"),
@@ -223,4 +228,49 @@ pub(crate) fn approved() -> StatusEvent {
             ..StatusMessage::default()
         },
     )
+}
+
+#[derive(Default)]
+pub(crate) struct FakeClaims {
+    pub(crate) directory: FakeDirectory,
+    pub(crate) updated: Vec<(String, Claim)>,
+    pub(crate) refusal: Option<Error>,
+}
+
+impl BusinessEntityDirectory for FakeClaims {
+    fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>> {
+        self.directory.find(identifier_value)
+    }
+
+    fn find_raw(&mut self, identifier_value: &str) -> Result<Vec<serde_json::Value>> {
+        self.directory.find_raw(identifier_value)
+    }
+}
+
+impl ClaimConfiguration for FakeClaims {
+    fn update_claim(&mut self, business_entity_id: &str, claim: &Claim) -> Result<()> {
+        if let Some(refusal) = self.refusal.take() {
+            return Err(refusal);
+        }
+        self.updated
+            .push((business_entity_id.to_owned(), claim.clone()));
+        Ok(())
+    }
+}
+
+/// Lets a test inspect the fake once the command is done with it.
+impl BusinessEntityDirectory for &mut FakeClaims {
+    fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>> {
+        (**self).find(identifier_value)
+    }
+
+    fn find_raw(&mut self, identifier_value: &str) -> Result<Vec<serde_json::Value>> {
+        (**self).find_raw(identifier_value)
+    }
+}
+
+impl ClaimConfiguration for &mut FakeClaims {
+    fn update_claim(&mut self, business_entity_id: &str, claim: &Claim) -> Result<()> {
+        (**self).update_claim(business_entity_id, claim)
+    }
 }

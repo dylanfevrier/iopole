@@ -7,6 +7,8 @@ const COMPANY_UID_HEADER: &str = "X-Company-UID";
 #[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct BusinessEntity {
+    #[serde(rename = "businessEntityId")]
+    pub(crate) id: Option<String>,
     pub(crate) name: Option<String>,
     #[serde(rename = "type")]
     pub(crate) entity_type: Option<String>,
