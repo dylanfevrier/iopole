@@ -34,9 +34,26 @@ fn help_lists_commands() {
         .arg("help")
         .assert()
         .success()
+        .stdout(predicate::str::contains("auth"))
+        .stdout(predicate::str::contains("document"))
+        .stdout(predicate::str::contains("entity"))
+        .stdout(predicate::str::contains("directory"));
+}
+
+#[test]
+fn auth_help_lists_login_and_logout() {
+    iopole()
+        .args(["auth", "help"])
+        .assert()
+        .success()
         .stdout(predicate::str::contains("login"))
-        .stdout(predicate::str::contains("logout"))
-        .stdout(predicate::str::contains("document"));
+        .stdout(predicate::str::contains("logout"));
+}
+
+#[test]
+fn login_lives_under_auth() {
+    iopole().arg("login").assert().failure();
+    iopole().arg("logout").assert().failure();
 }
 
 #[test]
@@ -47,4 +64,46 @@ fn document_help_lists_sync_and_search() {
         .success()
         .stdout(predicate::str::contains("sync"))
         .stdout(predicate::str::contains("search"));
+}
+
+#[test]
+fn directory_help_lists_french() {
+    iopole()
+        .args(["directory", "help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("french"));
+}
+
+#[test]
+fn directory_french_requires_a_siren_a_siret_or_a_name() {
+    for args in [&[][..], &["--type", "office"]] {
+        iopole()
+            .args(["directory", "french"])
+            .args(args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(
+                "<SIREN|--siret <SIRET>|--name <NAME>>",
+            ));
+    }
+}
+
+#[test]
+fn directory_french_rejects_malformed_criteria() {
+    for (args, message) in [
+        (&["12345678"][..], "a SIREN has exactly 9 digits"),
+        (&["12345678A"], "a SIREN has exactly 9 digits"),
+        (&["--siret", "007350101"], "a SIRET has exactly 14 digits"),
+        (&["--name", "OB*"], "at least 3 characters are required"),
+        (&["123456789", "--limit", "0"], "--limit"),
+        (&["123456789", "--limit", "201"], "--limit"),
+    ] {
+        iopole()
+            .args(["directory", "french"])
+            .args(args)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains(message));
+    }
 }

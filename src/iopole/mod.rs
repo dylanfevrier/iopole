@@ -1,5 +1,6 @@
 mod auth;
 mod business_entity;
+mod french_directory;
 mod http;
 mod model;
 mod query;
@@ -9,6 +10,9 @@ mod uuid_bound;
 pub(crate) mod testing;
 
 pub(crate) use business_entity::BusinessEntity;
+pub(crate) use french_directory::{
+    DirectoryEntry, DirectoryEntryType, DirectoryPage, DirectoryQuery, PostalAddress,
+};
 pub(crate) use http::{Endpoints, HttpClient};
 pub(crate) use query::SearchQuery;
 pub(crate) use uuid_bound::UuidBound;
@@ -24,6 +28,25 @@ pub(crate) trait InvoiceSearch {
 }
 
 pub(crate) trait BusinessEntityDirectory {
-    /// Business entities of the operator whose main identifier is `identifier_value`.
     fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>>;
+}
+
+pub(crate) trait FrenchDirectory {
+    fn search_french(
+        &mut self,
+        query: &DirectoryQuery,
+        offset: u32,
+        limit: u32,
+    ) -> Result<DirectoryPage>;
+}
+
+impl<D: FrenchDirectory> FrenchDirectory for &mut D {
+    fn search_french(
+        &mut self,
+        query: &DirectoryQuery,
+        offset: u32,
+        limit: u32,
+    ) -> Result<DirectoryPage> {
+        (**self).search_french(query, offset, limit)
+    }
 }

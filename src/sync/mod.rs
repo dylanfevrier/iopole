@@ -38,6 +38,5 @@ impl Default for SyncConfig {
 }
 
 pub(crate) trait Progress {
-    /// Receives the length of each part of the requested period once synchronized.
     fn advance(&mut self, synchronized: SignedDuration);
 }

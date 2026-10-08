@@ -92,4 +92,84 @@ pub(crate) fn identifier_query(identifier_value: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::*;
+    use crate::iopole::testing::bvs_renovation;
+
+    const OBSERVED_PAGE: &str = r#"{
+  "data": [
+    {
+      "businessEntityId": "0199b69f-fe32-701a-9604-617d13785726",
+      "country": "FR",
+      "countryIdentifier": { "siren": "980217632" },
+      "disclosureStatus": "Public",
+      "identifierScheme": "0002",
+      "identifierValue": "980217632",
+      "identifiers": [
+        {
+          "businessEntityIdentifierId": "0199b69f-fe32-701a-9604-6669329b91fe",
+          "networkRegistered": [
+            {
+              "directoryAddress": "0225:980217632",
+              "directoryId": "019fa93e-2169-75be-bbba-e5ad570ec5dc",
+              "isSelfBilling": false,
+              "networkId": "c11d52d5-40b8-4d71-83f1-1709cf47e834",
+              "networkIdentifier": "PEPPOL_INTERNATIONAL",
+              "validFrom": "2026-07-28"
+            },
+            {
+              "directoryAddress": "0225:980217632",
+              "directoryId": "019fa93e-1b8b-77a9-8e2b-c29a88f44712",
+              "isSelfBilling": false,
+              "networkId": "b00d52d5-40b8-4d71-83f1-1709cf47e812",
+              "networkIdentifier": "DOMESTIC_FR",
+              "validFrom": "2026-07-29"
+            }
+          ],
+          "scheme": "0002",
+          "type": "LEGAL_IDENTIFIER",
+          "value": "980217632"
+        }
+      ],
+      "name": "BVS RENOVATION",
+      "operatorRelation": {
+        "data": { "header": [ { "key": "X-Company-UID", "value": "6071797" } ] }
+      },
+      "scope": "PRIVATE_TAX_PAYER",
+      "type": "LEGAL_UNIT",
+      "vatRegime": "REAL_MONTHLY_TAX_REGIME"
+    }
+  ],
+  "meta": { "count": 1, "limit": 200, "offset": 0 }
+}"#;
+
+    #[test]
+    fn observed_payload_reads_as_the_fixture() -> Result<()> {
+        assert_eq!(parse_entities(OBSERVED_PAGE)?, [bvs_renovation()]);
+        Ok(())
+    }
+
+    #[test]
+    fn everything_is_optional() -> Result<()> {
+        let entities = parse_entities(r#"{"data":[{}]}"#)?;
+
+        assert_eq!(entities, [BusinessEntity::default()]);
+        assert_eq!(entities[0].company_uid(), None);
+        assert_eq!(entities[0].legal_identifier(), None);
+        assert_eq!(entities[0].network_registrations().count(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn query_matches_the_exact_identifier_value() {
+        assert_eq!(
+            identifier_query("980217632"),
+            r#"identifierValue:"980217632""#
+        );
+    }
+
+    #[test]
+    fn query_escapes_quotes() {
+        assert_eq!(identifier_query(r#"a"b\c"#), r#"identifierValue:"a\"b\\c""#);
+    }
+}

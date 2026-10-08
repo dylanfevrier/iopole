@@ -20,7 +20,7 @@ keyring = "4.2.0"
 rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher"] }
 secrecy = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
 thiserror = "2.0.21"
 ureq = { version = "3.4.2", features = ["json"] }
 zeroize = { version = "1.9.1", features = ["derive"] }

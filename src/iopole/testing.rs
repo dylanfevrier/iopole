@@ -137,3 +137,7 @@ pub(crate) fn bvs_renovation() -> BusinessEntity {
         }],
     }
 }
+
+pub(crate) use super::french_directory::testing::{
+    FakeFrenchDirectory, legal_unit_with_suffix, office_with_routing_code,
+};

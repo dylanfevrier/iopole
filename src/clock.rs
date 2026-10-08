@@ -13,4 +13,14 @@ impl Clock for SystemClock {
 }
 
 #[cfg(test)]
-pub(crate) mod testing;
+pub(crate) mod testing {
+    use super::*;
+
+    pub(crate) struct FixedClock(pub(crate) Timestamp);
+
+    impl Clock for FixedClock {
+        fn now(&self) -> Timestamp {
+            self.0
+        }
+    }
+}

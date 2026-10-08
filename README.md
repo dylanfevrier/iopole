@@ -6,11 +6,12 @@ Command-line tool for the Iopole platform.
 
 ```sh
 cargo run -- --help
-cargo run -- login
-cargo run -- logout
+cargo run -- auth login
+cargo run -- auth logout
 cargo run -- document sync --from 2026-09-01 [--to 2026-10-01] [--direction inbound|outbound|both]
 cargo run -- document search 352862346
 cargo run -- entity search 352862346
+cargo run -- directory french 352862346
 ```
 
 ### Document sync
@@ -58,6 +59,44 @@ When nothing matches, it suggests the `document sync` command to run.
 have the given identifier value (SIREN, SIRET, BCE...), and shows their name,
 company UID, legal identifier, country and network registrations. It tells
 when the company is not registered.
+
+### French directory
+
+`directory french` searches the French e-invoicing directory (annuaire), live,
+for any company, client of the operator or not. It takes a SIREN by default, or
+other criteria, combined when several are given:
+
+```sh
+cargo run -- directory french 352862346
+cargo run -- directory french --name OBAT [--siret 35286234600012] [--type legal-unit|office] \
+    [--limit 20] [--offset 0] [--json]
+```
+
+`--name` is case insensitive, needs at least 3 characters and accepts the `*`
+wildcard (`--name "BVS RENO*"`). Platform details are requested
+(`withPlatformDetails`). Each entry shows:
+
+```
+Name:        MUCHA CONCIERGERIE
+Type:        Office (PRIMARY)
+Legal unit:  MADAME FLORIA DJOMO-NDJILO (SIREN 944870435)
+Address:     62 RUE DANIELLE CASANOVA, 93200 SAINT-DENIS
+
+TYPE               IDENTIFIER           NETWORK
+OFFICE_IDENTIFIER  0009:94487043500012  -
+```
+
+Entries are separated by a line of `=`. An identifier registered on several
+networks takes one row per network. A column
+empty on every row, such as `VALID FROM` when the directory omits that date,
+is left out.
+
+The directory does
+not give the total number of matches: when a page is full, the command tells
+which `--offset` shows the next one.
+
+`--json` prints the response of Iopole as received, indented, instead of the
+entries, e.g. to debug or to pipe into `jq`.
 
 ## Installation
 

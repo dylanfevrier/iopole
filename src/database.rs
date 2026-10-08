@@ -125,7 +125,284 @@ fn create_private_file(path: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(test)]
-pub(crate) mod testing;
+pub(crate) mod testing {
+    use std::cell::RefCell;
+
+    use super::*;
+
+    #[derive(Default)]
+    pub(crate) struct InMemoryKeyStore {
+        key: RefCell<Option<SecretString>>,
+    }
+
+    impl DatabaseKeyStore for InMemoryKeyStore {
+        fn load_key(&self) -> Result<Option<SecretString>> {
+            Ok(self.key.borrow().clone())
+        }
+
+        fn save_key(&self, key: &SecretString) -> Result<()> {
+            *self.key.borrow_mut() = Some(key.clone());
+            Ok(())
+        }
+
+        fn delete_key(&self) -> Result<()> {
+            self.key.borrow_mut().take();
+            Ok(())
+        }
+    }
+
+    pub(crate) struct InvoiceRecord<'a> {
+        pub(crate) id: &'a str,
+        pub(crate) direction: &'a str,
+        pub(crate) created_at: &'a str,
+        pub(crate) number: Option<&'a str>,
+        pub(crate) amount: Option<&'a str>,
+        pub(crate) seller_name: Option<&'a str>,
+        pub(crate) seller_identifier: Option<&'a str>,
+        pub(crate) buyer_name: Option<&'a str>,
+        pub(crate) buyer_identifier: Option<&'a str>,
+        pub(crate) state: &'a str,
+        pub(crate) last_status_code: Option<&'a str>,
+    }
+
+    impl Default for InvoiceRecord<'_> {
+        fn default() -> Self {
+            Self {
+                id: "01a1",
+                direction: "INBOUND",
+                created_at: "2026-09-01T10:00:00.000+00:00",
+                number: None,
+                amount: None,
+                seller_name: None,
+                seller_identifier: None,
+                buyer_name: None,
+                buyer_identifier: None,
+                state: "VALID",
+                last_status_code: None,
+            }
+        }
+    }
+
+    impl InvoiceRecord<'_> {
+        pub(crate) fn insert(&self, connection: &rusqlite::Connection) -> Result<()> {
+            connection.execute(
+                "INSERT INTO invoice (invoice_id, direction, created_at, number, amount,
+                                  seller_name, seller_identifier, buyer_name, buyer_identifier,
+                                  state, last_status_code, raw, synced_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, '{}', '')",
+                rusqlite::params![
+                    self.id,
+                    self.direction,
+                    self.created_at,
+                    self.number,
+                    self.amount,
+                    self.seller_name,
+                    self.seller_identifier,
+                    self.buyer_name,
+                    self.buyer_identifier,
+                    self.state,
+                    self.last_status_code,
+                ],
+            )?;
+            Ok(())
+        }
+    }
+}
 
 #[cfg(test)]
-mod tests;
+mod tests {
+    use super::testing::InMemoryKeyStore;
+    use super::*;
+
+    fn create_populated_database(path: &Path, keys: &InMemoryKeyStore) -> Result<()> {
+        open(path, keys)?
+            .execute_batch("CREATE TABLE probe (id INTEGER); INSERT INTO probe VALUES (1)")?;
+        Ok(())
+    }
+
+    #[test]
+    fn creates_database_and_missing_directories() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("nested/iopole.db");
+
+        create_populated_database(&path, &InMemoryKeyStore::default())?;
+
+        assert!(path.is_file());
+        Ok(())
+    }
+
+    #[test]
+    fn stores_generated_key_on_first_open() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let keys = InMemoryKeyStore::default();
+
+        open(&tmp.path().join("iopole.db"), &keys)?;
+
+        let key = keys.load_key()?.map(|key| key.expose_secret().to_owned());
+        assert_eq!(key.map(|key| key.len()), Some(KEY_BYTES * 2));
+        Ok(())
+    }
+
+    #[test]
+    fn database_file_is_encrypted() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+
+        create_populated_database(&path, &InMemoryKeyStore::default())?;
+
+        let header = std::fs::read(&path)?;
+        assert!(!header.starts_with(b"SQLite format 3"));
+        Ok(())
+    }
+
+    #[test]
+    fn reopening_with_same_key_reads_existing_data() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        let keys = InMemoryKeyStore::default();
+        create_populated_database(&path, &keys)?;
+
+        let count: i64 =
+            open(&path, &keys)?.query_row("SELECT count(*) FROM probe", [], |row| row.get(0))?;
+
+        assert_eq!(count, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_wrong_key() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        create_populated_database(&path, &InMemoryKeyStore::default())?;
+        let other_keys = InMemoryKeyStore::default();
+        other_keys.save_key(&generate_key()?)?;
+
+        let result = open(&path, &other_keys);
+
+        assert!(matches!(result, Err(Error::InvalidDatabaseKey(_))));
+        Ok(())
+    }
+
+    #[test]
+    fn refuses_existing_database_without_key() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        create_populated_database(&path, &InMemoryKeyStore::default())?;
+
+        let result = open(&path, &InMemoryKeyStore::default());
+
+        assert!(matches!(result, Err(Error::MissingDatabaseKey(_))));
+        Ok(())
+    }
+
+    #[test]
+    fn delete_removes_database_and_key() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        let keys = InMemoryKeyStore::default();
+        create_populated_database(&path, &keys)?;
+
+        delete(&path, &keys)?;
+
+        assert!(!path.exists());
+        assert!(keys.load_key()?.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn delete_succeeds_when_database_does_not_exist() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+
+        delete(&tmp.path().join("iopole.db"), &InMemoryKeyStore::default())
+    }
+
+    #[test]
+    fn creates_schema_on_first_open() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+
+        let connection = open(&tmp.path().join("iopole.db"), &InMemoryKeyStore::default())?;
+
+        let version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        assert_eq!(usize::try_from(version).ok(), Some(MIGRATIONS.len()));
+        connection
+            .execute_batch("SELECT invoice_id FROM invoice; SELECT status FROM sync_range")?;
+        Ok(())
+    }
+
+    #[test]
+    fn migrations_are_applied_once() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        let keys = InMemoryKeyStore::default();
+        open(&path, &keys)?;
+
+        open(&path, &keys)?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn refuses_newer_schema() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        let keys = InMemoryKeyStore::default();
+        open(&path, &keys)?.pragma_update(None, "user_version", 99)?;
+
+        let result = open(&path, &keys);
+
+        assert!(matches!(result, Err(Error::UnsupportedSchema(99))));
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn database_is_only_accessible_by_owner() -> Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir()?;
+        let dir = tmp.path().join("iopole");
+        let path = dir.join("iopole.db");
+
+        open(&path, &InMemoryKeyStore::default())?;
+
+        let mode =
+            |p: &Path| -> Result<u32> { Ok(std::fs::metadata(p)?.permissions().mode() & 0o777) };
+        assert_eq!(mode(&dir)?, 0o700);
+        assert_eq!(mode(&path)?, 0o600);
+        Ok(())
+    }
+
+    #[test]
+    fn migration_extracts_identifier_values_of_any_scheme() -> Result<()> {
+        let tmp = tempfile::tempdir()?;
+        let path = tmp.path().join("iopole.db");
+        let keys = InMemoryKeyStore::default();
+        let mut connection = Connection::open(&path)?;
+        let key = generate_key()?;
+        keys.save_key(&key)?;
+        unlock(&connection, &key, &path)?;
+        connection.execute_batch(MIGRATIONS[0])?;
+        connection.execute_batch(
+            "INSERT INTO invoice (invoice_id, direction, state, created_at, seller_address,
+                              buyer_address, raw, synced_at)
+         VALUES ('01a1', 'INBOUND', 'VALID', '', '0208:0123456789', '0225:352862346', '{}', ''),
+                ('01a2', 'INBOUND', 'VALID', '', 'no-scheme', NULL, '{}', '');
+         PRAGMA user_version = 1;",
+        )?;
+
+        migrate(&mut connection)?;
+
+        let identifiers: Vec<(Option<String>, Option<String>)> = connection
+            .prepare("SELECT seller_identifier, buyer_identifier FROM invoice ORDER BY invoice_id")?
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        assert_eq!(
+            identifiers,
+            [
+                (Some("0123456789".to_owned()), Some("352862346".to_owned())),
+                (None, None),
+            ]
+        );
+        Ok(())
+    }
+}

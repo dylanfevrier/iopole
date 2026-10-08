@@ -14,7 +14,7 @@ pub enum Error {
     #[error("cannot access system keyring: {0}")]
     Keyring(#[from] keyring::Error),
 
-    #[error("not logged in; run `iopole login` first")]
+    #[error("not logged in; run `iopole auth login` first")]
     NotLoggedIn,
 
     #[error("cannot locate home directory")]
@@ -45,7 +45,7 @@ pub enum Error {
     Payload(#[from] serde_json::Error),
 
     #[error(
-        "Iopole authentication failed with HTTP {0}; check the credentials or run `iopole login` again"
+        "Iopole authentication failed with HTTP {0}; check the credentials or run `iopole auth login` again"
     )]
     Authentication(u16),
 
