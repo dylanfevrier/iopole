@@ -31,6 +31,9 @@ pub(crate) trait InvoiceSearch {
 
 pub(crate) trait BusinessEntityDirectory {
     fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>>;
+
+    /// The entities as Iopole returns them.
+    fn find_raw(&mut self, identifier_value: &str) -> Result<Vec<serde_json::Value>>;
 }
 
 pub(crate) trait InvoiceStatuses {

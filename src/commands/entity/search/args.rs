@@ -7,6 +7,10 @@ pub(crate) struct Args {
     /// Identifier value of the business entity (SIREN, SIRET, BCE...), without its scheme
     #[arg(value_parser = parse_identifier_value)]
     pub(crate) identifier_value: String,
+
+    /// Print the entities as Iopole returns them
+    #[arg(long)]
+    pub(crate) json: bool,
 }
 
 #[cfg(test)]
@@ -20,6 +24,13 @@ mod tests {
 
         assert_eq!(args.identifier_value, "0114445670");
         assert!(parse_args::<Args>(&["0208:0114445670"]).is_err());
+        assert!(!args.json);
+        Ok(())
+    }
+
+    #[test]
+    fn json_is_an_option() -> Result<(), clap::Error> {
+        assert!(parse_args::<Args>(&["0114445670", "--json"])?.json);
         Ok(())
     }
 }

@@ -5,7 +5,9 @@ use secrecy::ExposeSecret;
 use ureq::Agent;
 
 use super::auth::{AccessToken, TokenResponse};
-use super::business_entity::{BusinessEntity, identifier_query, parse_entities};
+use super::business_entity::{
+    BusinessEntity, identifier_query, parse_entities, parse_raw_entities,
+};
 use super::french_directory::{DirectoryPage, DirectoryQuery, EMPTY_PAGE, parse_directory_page};
 use super::model::parse_page;
 use super::status_history::{StatusEvent, parse_status_history};
@@ -181,6 +183,19 @@ impl InvoiceSearch for HttpClient {
 
 impl BusinessEntityDirectory for HttpClient {
     fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>> {
+        self.entity_page(identifier_value)?
+            .map_or_else(|| Ok(Vec::new()), |body| parse_entities(&body))
+    }
+
+    fn find_raw(&mut self, identifier_value: &str) -> Result<Vec<serde_json::Value>> {
+        self.entity_page(identifier_value)?
+            .map_or_else(|| Ok(Vec::new()), |body| parse_raw_entities(&body))
+    }
+}
+
+impl HttpClient {
+    /// `None` when no entity matches.
+    fn entity_page(&mut self, identifier_value: &str) -> Result<Option<String>> {
         let reply = self.get(
             BUSINESS_ENTITY_PATH,
             &[
@@ -189,9 +204,9 @@ impl BusinessEntityDirectory for HttpClient {
             ],
         );
         match reply {
-            Ok(body) => parse_entities(&body),
+            Ok(body) => Ok(Some(body)),
             // Documented answer when no entity matches the query.
-            Err(Error::UnexpectedStatus { status: 404, .. }) => Ok(Vec::new()),
+            Err(Error::UnexpectedStatus { status: 404, .. }) => Ok(None),
             Err(err) => Err(err),
         }
     }

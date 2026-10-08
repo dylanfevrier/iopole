@@ -92,6 +92,7 @@ pub(crate) fn outbound(instant: &str, sequence: u16) -> Invoice {
 #[derive(Default)]
 pub(crate) struct FakeDirectory {
     pub(crate) entities: Vec<BusinessEntity>,
+    pub(crate) raw: Vec<serde_json::Value>,
     pub(crate) searched: Vec<String>,
 }
 
@@ -109,6 +110,11 @@ impl BusinessEntityDirectory for FakeDirectory {
             })
             .cloned()
             .collect())
+    }
+
+    fn find_raw(&mut self, identifier_value: &str) -> Result<Vec<serde_json::Value>> {
+        self.searched.push(identifier_value.to_owned());
+        Ok(self.raw.clone())
     }
 }
 

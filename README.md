@@ -90,6 +90,9 @@ have the given identifier value (SIREN, SIRET, BCE...). It shows them like
 each address is available since on every network. It tells when the company is
 not registered.
 
+`--json` prints the matching entities as Iopole returns them, pretty-printed,
+as a list (`[]` when nothing matches).
+
 ### French directory
 
 `directory french` searches the French e-invoicing directory (annuaire), live,

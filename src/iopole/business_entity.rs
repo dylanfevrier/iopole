@@ -68,12 +68,17 @@ impl BusinessEntity {
 }
 
 #[derive(Deserialize)]
-struct EntityPage {
-    data: Vec<BusinessEntity>,
+struct EntityPage<T> {
+    data: Vec<T>,
 }
 
 pub(crate) fn parse_entities(body: &str) -> Result<Vec<BusinessEntity>> {
-    Ok(serde_json::from_str::<EntityPage>(body)?.data)
+    Ok(serde_json::from_str::<EntityPage<BusinessEntity>>(body)?.data)
+}
+
+/// The entities as Iopole returns them, out of their page.
+pub(crate) fn parse_raw_entities(body: &str) -> Result<Vec<serde_json::Value>> {
+    Ok(serde_json::from_str::<EntityPage<serde_json::Value>>(body)?.data)
 }
 
 pub(crate) fn identifier_query(identifier_value: &str) -> String {

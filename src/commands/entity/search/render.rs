@@ -8,6 +8,13 @@ use crate::render::{self, Fields, MISSING};
 
 const UNNAMED: &str = "(unnamed)";
 
+/// The entities as Iopole returns them, pretty-printed.
+pub(super) fn json(out: &mut impl Write, entities: &[serde_json::Value]) -> Result<()> {
+    serde_json::to_writer_pretty(&mut *out, entities)?;
+    writeln!(out)?;
+    Ok(())
+}
+
 pub(super) fn entities(
     out: &mut impl Write,
     identifier_value: &str,
