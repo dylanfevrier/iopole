@@ -71,6 +71,31 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
     Ok(page)
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct InvoiceParties {
+    pub(crate) seller_name: Option<String>,
+    pub(crate) seller_identifier: Option<String>,
+    pub(crate) buyer_name: Option<String>,
+    pub(crate) buyer_identifier: Option<String>,
+}
+
+pub(crate) fn parties(connection: &Connection, invoice_id: &str) -> Result<Option<InvoiceParties>> {
+    let mut statement = connection.prepare(
+        "SELECT seller_name, seller_identifier, buyer_name, buyer_identifier
+         FROM invoice WHERE invoice_id = ?1",
+    )?;
+    let mut rows = statement.query([invoice_id])?;
+    let Some(row) = rows.next()? else {
+        return Ok(None);
+    };
+    Ok(Some(InvoiceParties {
+        seller_name: row.get(0)?,
+        seller_identifier: row.get(1)?,
+        buyer_name: row.get(2)?,
+        buyer_identifier: row.get(3)?,
+    }))
+}
+
 fn conditions(filter: &InvoiceFilter) -> (Vec<String>, Vec<String>) {
     let mut conditions = vec![
         match filter.role {
@@ -310,6 +335,33 @@ mod tests {
         };
 
         assert_eq!(ids(&find(&fixture.connection, &bce)?), ["01a5"]);
+        Ok(())
+    }
+
+    #[test]
+    fn reads_the_parties_of_a_synchronized_invoice() -> Result<()> {
+        let fixture = Fixture::new()?;
+        InvoiceRecord {
+            id: "01a2",
+            seller_name: Some("Leroy Merlin France"),
+            seller_identifier: Some("384560942"),
+            buyer_name: Some("BVS RENOVATION"),
+            ..InvoiceRecord::default()
+        }
+        .insert(&fixture.connection)?;
+
+        let parties = parties(&fixture.connection, "01a2")?;
+
+        assert_eq!(
+            parties,
+            Some(InvoiceParties {
+                seller_name: Some("Leroy Merlin France".to_owned()),
+                seller_identifier: Some("384560942".to_owned()),
+                buyer_name: Some("BVS RENOVATION".to_owned()),
+                buyer_identifier: None,
+            })
+        );
+        assert_eq!(super::parties(&fixture.connection, "01a3")?, None);
         Ok(())
     }
 }

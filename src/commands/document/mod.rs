@@ -1,4 +1,5 @@
 pub(crate) mod search;
+pub(crate) mod status;
 pub(crate) mod sync;
 
 use clap::{Subcommand, ValueEnum};
@@ -14,6 +15,8 @@ pub(crate) enum Command {
     Sync(sync::Args),
     /// Search synchronized invoices of a company by its electronic address
     Search(search::Args),
+    /// Show the status history of an invoice, live from Iopole
+    Status(status::Args),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

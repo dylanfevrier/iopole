@@ -10,6 +10,7 @@ cargo run -- auth login
 cargo run -- auth logout
 cargo run -- document sync --from 2026-09-01 [--to 2026-10-01] [--direction inbound|outbound|both]
 cargo run -- document search 352862346
+cargo run -- document status 01a10b05-e3fd-74c8-b9cd-ce8e4c012777
 cargo run -- entity search 352862346
 cargo run -- directory french 352862346
 ```
@@ -52,6 +53,29 @@ cargo run -- document search 352862346 [--role seller|buyer] [--direction inboun
 ```
 
 When nothing matches, it suggests the `document sync` command to run.
+
+### Document status
+
+`document status` asks Iopole, live, for the status history of an invoice,
+given its UUID as shown by `document search`, most recent first:
+
+```
+ID:           01a10b05-e3fd-74c8-b9cd-ce8e4c012777
+Seller:       Leroy Merlin France (SIREN 384560942)
+Buyer:        BVS RENOVATION (SIREN 980217632)
+
+DATE (UTC)           STATUS
+2026-10-05 09:45:07  PAYMENT_RECEIVED (212)
+```
+
+- The history only holds the lifecycle statuses exchanged on the network. The
+  statuses of the platform, such as `MADE_AVAILABLE` or `REJECTED`, are not in
+  it: an invoice may show them in `document search` and have no history.
+- Statuses name the parties generically (`VENDEUR`, `ACHETEUR`): the names come
+  from the local database when the invoice is synchronized, the SIRENs from
+  the statuses.
+- Iopole answers an unknown UUID with an empty history, as for an invoice
+  without status.
 
 ### Entity search
 

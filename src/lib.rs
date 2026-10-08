@@ -45,6 +45,16 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         Command::Document {
             command: document::Command::Search(args),
         } => commands::document::search::execute(&database::default_path()?, &keyring, args, out),
+        Command::Document {
+            command: document::Command::Status(args),
+        } => commands::document::status::execute(
+            &keyring,
+            &database::default_path()?,
+            &keyring,
+            |credentials| HttpClient::new(Endpoints::from_env(), credentials),
+            args,
+            out,
+        ),
         Command::Entity {
             command: entity::Command::Search(args),
         } => commands::entity::search::execute(

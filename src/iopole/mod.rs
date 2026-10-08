@@ -4,6 +4,7 @@ mod french_directory;
 mod http;
 mod model;
 mod query;
+mod status_history;
 mod uuid_bound;
 
 #[cfg(test)]
@@ -15,6 +16,7 @@ pub(crate) use french_directory::{
 };
 pub(crate) use http::{Endpoints, HttpClient};
 pub(crate) use query::SearchQuery;
+pub(crate) use status_history::{StatusEvent, StatusParty, buyer, seller};
 pub(crate) use uuid_bound::UuidBound;
 
 use crate::Result;
@@ -29,6 +31,11 @@ pub(crate) trait InvoiceSearch {
 
 pub(crate) trait BusinessEntityDirectory {
     fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>>;
+}
+
+pub(crate) trait InvoiceStatuses {
+    /// `None` when Iopole does not know the invoice.
+    fn status_history(&mut self, invoice_id: &str) -> Result<Option<Vec<StatusEvent>>>;
 }
 
 pub(crate) trait FrenchDirectory {

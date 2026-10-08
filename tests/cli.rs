@@ -57,13 +57,23 @@ fn login_lives_under_auth() {
 }
 
 #[test]
-fn document_help_lists_sync_and_search() {
+fn document_help_lists_its_commands() {
     iopole()
         .args(["document", "help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("sync"))
-        .stdout(predicate::str::contains("search"));
+        .stdout(predicate::str::contains("search"))
+        .stdout(predicate::str::contains("status"));
+}
+
+#[test]
+fn document_status_takes_an_invoice_uuid() {
+    iopole()
+        .args(["document", "status", "260902440"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("is not a UUID"));
 }
 
 #[test]

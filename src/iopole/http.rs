@@ -8,7 +8,11 @@ use super::auth::{AccessToken, TokenResponse};
 use super::business_entity::{BusinessEntity, identifier_query, parse_entities};
 use super::french_directory::{DirectoryPage, DirectoryQuery, EMPTY_PAGE, parse_directory_page};
 use super::model::parse_page;
-use super::{BusinessEntityDirectory, FrenchDirectory, InvoiceSearch, MAX_PAGE_LIMIT, SearchQuery};
+use super::status_history::{StatusEvent, parse_status_history};
+use super::{
+    BusinessEntityDirectory, FrenchDirectory, InvoiceSearch, InvoiceStatuses, MAX_PAGE_LIMIT,
+    SearchQuery,
+};
 use crate::credentials::Credentials;
 use crate::invoice::Invoice;
 use crate::{Error, Result};
@@ -188,6 +192,16 @@ impl BusinessEntityDirectory for HttpClient {
             Ok(body) => parse_entities(&body),
             // Documented answer when no entity matches the query.
             Err(Error::UnexpectedStatus { status: 404, .. }) => Ok(Vec::new()),
+            Err(err) => Err(err),
+        }
+    }
+}
+
+impl InvoiceStatuses for HttpClient {
+    fn status_history(&mut self, invoice_id: &str) -> Result<Option<Vec<StatusEvent>>> {
+        match self.get(&format!("v1/invoice/{invoice_id}/status-history"), &[]) {
+            Ok(body) => parse_status_history(&body).map(Some),
+            Err(Error::UnexpectedStatus { status: 404, .. }) => Ok(None),
             Err(err) => Err(err),
         }
     }

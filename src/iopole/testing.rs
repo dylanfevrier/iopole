@@ -4,7 +4,11 @@ use super::business_entity::{
     BusinessEntity, EntityIdentifier, Header, NetworkRegistration, OperatorRelation,
     OperatorRelationData,
 };
-use super::{BusinessEntityDirectory, InvoiceSearch, SearchQuery};
+use super::status_history::{
+    DocumentReference, RoleCode, StatusCode, StatusEvent, StatusMessage, StatusParty,
+    StatusResponse,
+};
+use super::{BusinessEntityDirectory, InvoiceSearch, InvoiceStatuses, SearchQuery};
 use crate::Result;
 use crate::invoice::{Invoice, Party, Status};
 
@@ -143,3 +147,68 @@ pub(crate) fn bvs_renovation() -> BusinessEntity {
 pub(crate) use super::french_directory::testing::{
     FakeFrenchDirectory, legal_unit_with_suffix, office_with_routing_code,
 };
+
+pub(crate) struct FakeStatuses {
+    pub(crate) history: Option<Vec<StatusEvent>>,
+}
+
+impl InvoiceStatuses for FakeStatuses {
+    fn status_history(&mut self, _: &str) -> Result<Option<Vec<StatusEvent>>> {
+        Ok(self.history.clone())
+    }
+}
+
+fn party(name: Option<&str>, siren: Option<&str>, role: &str) -> StatusParty {
+    StatusParty {
+        name: name.map(str::to_owned),
+        siren: siren.map(str::to_owned),
+        role_code: Some(RoleCode {
+            code: Some(role.to_owned()),
+        }),
+    }
+}
+
+fn status(date: &str, code: &str, network_code: &str, message: StatusMessage) -> StatusEvent {
+    StatusEvent {
+        date: Some(date.to_owned()),
+        status: Some(StatusCode {
+            code: Some(code.to_owned()),
+            network_code: Some(network_code.to_owned()),
+        }),
+        json: Some(message),
+    }
+}
+
+/// As Iopole sent it for an invoice of Leroy Merlin France to BVS RENOVATION.
+pub(crate) fn payment_received() -> StatusEvent {
+    status(
+        "2026-10-05T09:45:07.000Z",
+        "PAYMENT_RECEIVED",
+        "212",
+        StatusMessage {
+            issuer: Some(party(Some("VENDEUR"), Some("384560942"), "SELLER")),
+            sender: Some(party(None, None, "DEMATERIALIZATION_OPERATOR")),
+            responses: vec![StatusResponse {
+                document_reference: Some(DocumentReference {
+                    issuer: Some(party(None, Some("384560942"), "SELLER")),
+                }),
+            }],
+            recipients: vec![
+                party(Some("ACHETEUR"), Some("980217632"), "BUYER"),
+                party(Some("PPF"), None, "PPF"),
+            ],
+        },
+    )
+}
+
+pub(crate) fn approved() -> StatusEvent {
+    status(
+        "2026-10-01T14:02:11.000Z",
+        "APPROVED",
+        "205",
+        StatusMessage {
+            sender: Some(party(Some("ACHETEUR"), Some("980217632"), "BUYER")),
+            ..StatusMessage::default()
+        },
+    )
+}
