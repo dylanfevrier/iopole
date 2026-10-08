@@ -46,10 +46,11 @@ means) in an encrypted SQLite database whose key lives in the system keyring.
 `document search` looks for the invoices of a company, as seller or buyer, in
 the local database only. It matches the value of the electronic address whatever its
 scheme: `352862346` finds `0225:352862346` and `0002:352862346`, `0123456789`
-finds `0208:0123456789`.
+finds `0208:0123456789`. Without it, the search covers every company, and
+`--role` is refused.
 
 ```sh
-cargo run -- document search 352862346 [--role seller|buyer] [--direction inbound|outbound|both] \
+cargo run -- document search [352862346 [--role seller|buyer]] [--direction inbound|outbound|both] \
     [--state VALID,DELIVERED] [--status REJECTED] [--from 2026-09-01] [--to 2026-10-01] [--limit 50]
 ```
 

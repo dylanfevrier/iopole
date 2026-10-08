@@ -13,7 +13,7 @@ use crate::invoice::Direction;
 pub(crate) enum Command {
     /// Synchronize Iopole invoices into the local database
     Sync(sync::Args),
-    /// Search synchronized invoices of a company by its electronic address
+    /// Search synchronized invoices, of every company or of one by its electronic address
     Search(search::Args),
     /// Show the status history of an invoice, live from Iopole
     Status(status::Args),

@@ -41,7 +41,7 @@ mod tests {
 
     fn args() -> Args {
         Args {
-            identifier_value: IDENTIFIER.to_owned(),
+            identifier_value: Some(IDENTIFIER.to_owned()),
             role: None,
             direction: DirectionFilter::Both,
             states: Vec::new(),
@@ -129,10 +129,34 @@ mod tests {
     }
 
     #[test]
+    fn finds_the_invoices_of_every_company_without_identifier() -> Result<()> {
+        let fixture = Fixture::new(&[
+            pending(),
+            delivered(),
+            InvoiceRecord {
+                id: "01a3",
+                seller_identifier: Some("517657334"),
+                ..InvoiceRecord::default()
+            },
+        ])?;
+        let everyone = Args {
+            identifier_value: None,
+            ..args()
+        };
+
+        assert!(
+            fixture
+                .search(&everyone)?
+                .ends_with("\n3 invoices found.\n")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn invites_to_sync_when_nothing_matches() -> Result<()> {
         let fixture = Fixture::new(&[delivered()])?;
         let unknown = Args {
-            identifier_value: "000000000".to_owned(),
+            identifier_value: Some("000000000".to_owned()),
             ..args()
         };
 

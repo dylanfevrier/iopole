@@ -11,12 +11,12 @@ use crate::iopole::UuidBound;
 #[derive(Debug, ClapArgs)]
 pub(crate) struct Args {
     /// Electronic address value of the seller or the buyer, whatever its scheme
-    /// (352862346 matches 0225:352862346 and 0002:352862346)
+    /// (352862346 matches 0225:352862346 and 0002:352862346); every company when omitted
     #[arg(value_parser = parse_identifier_value)]
-    pub(crate) identifier_value: String,
+    pub(crate) identifier_value: Option<String>,
 
     /// Only invoices where the company has this role
-    #[arg(long, value_enum)]
+    #[arg(long, value_enum, requires = "identifier_value")]
     pub(crate) role: Option<RoleFilter>,
 
     /// Invoice flow
@@ -123,11 +123,23 @@ mod tests {
     #[test]
     fn takes_identifier_values_without_their_scheme() -> Result<(), clap::Error> {
         assert_eq!(
-            parse_args::<Args>(&["0123456789"])?.identifier_value,
-            "0123456789"
+            parse_args::<Args>(&["0123456789"])?
+                .identifier_value
+                .as_deref(),
+            Some("0123456789")
         );
         assert!(parse_args::<Args>(&["0225:352862346"]).is_err());
         assert!(parse_args::<Args>(&[" "]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn the_identifier_is_optional_but_a_role_needs_one() -> Result<(), clap::Error> {
+        let args = parse_args::<Args>(&["--state", "rejected"])?;
+
+        assert_eq!(args.identifier_value, None);
+        assert_eq!(args.states, ["REJECTED"]);
+        assert!(parse_args::<Args>(&["--role", "seller"]).is_err());
         Ok(())
     }
 

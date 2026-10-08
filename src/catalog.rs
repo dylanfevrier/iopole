@@ -12,7 +12,9 @@ pub(crate) enum Role {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct InvoiceFilter {
-    pub(crate) identifier_value: String,
+    /// Every company when `None`.
+    pub(crate) identifier_value: Option<String>,
+    /// Only applies to `identifier_value`.
     pub(crate) role: Option<Role>,
     pub(crate) directions: Vec<Direction>,
     pub(crate) states: Vec<String>,
@@ -48,8 +50,8 @@ pub(crate) fn find(connection: &Connection, filter: &InvoiceFilter) -> Result<Pa
     let sql = format!(
         "SELECT invoice_id, direction, created_at, number, amount, seller_name, buyer_name,
                 state, last_status_code, raw, count(*) OVER ()
-         FROM invoice WHERE {} ORDER BY invoice_id DESC LIMIT {}",
-        conditions.join(" AND "),
+         FROM invoice {} ORDER BY invoice_id DESC LIMIT {}",
+        where_clause(&conditions),
         filter.limit,
     );
 
@@ -99,16 +101,29 @@ pub(crate) fn parties(connection: &Connection, invoice_id: &str) -> Result<Optio
     }))
 }
 
+fn where_clause(conditions: &[String]) -> String {
+    if conditions.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", conditions.join(" AND "))
+    }
+}
+
 fn conditions(filter: &InvoiceFilter) -> (Vec<String>, Vec<String>) {
-    let mut conditions = vec![
-        match filter.role {
-            Some(Role::Seller) => "seller_identifier = ?",
-            Some(Role::Buyer) => "buyer_identifier = ?",
-            None => "(seller_identifier = ?1 OR buyer_identifier = ?1)",
-        }
-        .to_owned(),
-    ];
-    let mut params = vec![filter.identifier_value.clone()];
+    let mut conditions = Vec::new();
+    let mut params = Vec::new();
+    // First, so that `?1` is the identifier value.
+    if let Some(identifier_value) = &filter.identifier_value {
+        conditions.push(
+            match filter.role {
+                Some(Role::Seller) => "seller_identifier = ?",
+                Some(Role::Buyer) => "buyer_identifier = ?",
+                None => "(seller_identifier = ?1 OR buyer_identifier = ?1)",
+            }
+            .to_owned(),
+        );
+        params.push(identifier_value.clone());
+    }
 
     let directions: Vec<_> = filter
         .directions
@@ -190,7 +205,7 @@ mod tests {
 
     fn filter() -> InvoiceFilter {
         InvoiceFilter {
-            identifier_value: IDENTIFIER.to_owned(),
+            identifier_value: Some(IDENTIFIER.to_owned()),
             role: None,
             directions: Vec::new(),
             states: Vec::new(),
@@ -239,6 +254,37 @@ mod tests {
 
         assert_eq!(ids(&page), ["01a3", "01a2", "01a1"]);
         assert_eq!(page.total, 3);
+        Ok(())
+    }
+
+    #[test]
+    fn finds_every_invoice_without_identifier() -> Result<()> {
+        let fixture = populated()?;
+        let everyone = InvoiceFilter {
+            identifier_value: None,
+            ..filter()
+        };
+
+        assert_eq!(
+            ids(&find(&fixture.connection, &everyone)?),
+            ["01a4", "01a3", "01a2", "01a1"]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn filters_without_identifier() -> Result<()> {
+        let fixture = populated()?;
+        let delivered = InvoiceFilter {
+            identifier_value: None,
+            states: vec!["DELIVERED".to_owned()],
+            ..filter()
+        };
+
+        assert_eq!(
+            ids(&find(&fixture.connection, &delivered)?),
+            ["01a4", "01a1"]
+        );
         Ok(())
     }
 
@@ -320,7 +366,7 @@ mod tests {
     fn unknown_identifier_finds_nothing() -> Result<()> {
         let fixture = populated()?;
         let unknown = InvoiceFilter {
-            identifier_value: "000000000".to_owned(),
+            identifier_value: Some("000000000".to_owned()),
             ..filter()
         };
 
@@ -333,7 +379,7 @@ mod tests {
         let fixture = populated()?;
         fixture.insert("01a5", "INBOUND", "0123456789", OTHER, "VALID", None)?;
         let bce = InvoiceFilter {
-            identifier_value: "0123456789".to_owned(),
+            identifier_value: Some("0123456789".to_owned()),
             ..filter()
         };
 
