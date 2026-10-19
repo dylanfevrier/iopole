@@ -8,15 +8,10 @@ pub(crate) use args::{Args, RoleFilter, parse_code};
 
 use crate::Result;
 use crate::catalog::{self, InvoiceFilter, Page};
-use crate::database::{self, DatabaseKeyStore};
+use crate::database;
 
-pub(crate) fn execute(
-    database_path: &Path,
-    keys: &impl DatabaseKeyStore,
-    args: &Args,
-    out: &mut impl Write,
-) -> Result<()> {
-    let page = find(database_path, keys, &args.filter()?)?;
+pub(crate) fn execute(database_path: &Path, args: &Args, out: &mut impl Write) -> Result<()> {
+    let page = find(database_path, &args.filter()?)?;
     if args.json {
         return render::json(out, &page);
     }
@@ -27,22 +22,18 @@ pub(crate) fn execute(
 }
 
 /// Nothing without local database, which is not created.
-pub(crate) fn find(
-    database_path: &Path,
-    keys: &impl DatabaseKeyStore,
-    filter: &InvoiceFilter,
-) -> Result<Page> {
+pub(crate) fn find(database_path: &Path, filter: &InvoiceFilter) -> Result<Page> {
     if !database_path.exists() {
         return Ok(Page::default());
     }
-    catalog::find(&database::open(database_path, keys)?, filter)
+    catalog::find(&database::open(database_path)?, filter)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::commands::document::DirectionFilter;
-    use crate::database::testing::{InMemoryKeyStore, InvoiceRecord};
+    use crate::database::testing::InvoiceRecord;
 
     const IDENTIFIER: &str = "352862346";
 
@@ -63,16 +54,14 @@ mod tests {
 
     struct Fixture {
         tmp: tempfile::TempDir,
-        keys: InMemoryKeyStore,
     }
 
     impl Fixture {
         fn new(records: &[InvoiceRecord<'_>]) -> Result<Self> {
             let fixture = Self {
                 tmp: tempfile::tempdir()?,
-                keys: InMemoryKeyStore::default(),
             };
-            let connection = database::open(&fixture.path(), &fixture.keys)?;
+            let connection = database::open(&fixture.path())?;
             for record in records {
                 record.insert(&connection)?;
             }
@@ -85,7 +74,7 @@ mod tests {
 
         fn search(&self, args: &Args) -> Result<String> {
             let mut out = Vec::new();
-            execute(&self.path(), &self.keys, args, &mut out)?;
+            execute(&self.path(), args, &mut out)?;
             Ok(String::from_utf8_lossy(&out).into_owned())
         }
     }
@@ -215,12 +204,7 @@ mod tests {
         };
         let mut out = Vec::new();
 
-        execute(
-            &tmp.path().join("iopole.db"),
-            &InMemoryKeyStore::default(),
-            &json,
-            &mut out,
-        )?;
+        execute(&tmp.path().join("iopole.db"), &json, &mut out)?;
 
         assert_eq!(String::from_utf8_lossy(&out), "[]\n");
         Ok(())
@@ -230,12 +214,10 @@ mod tests {
     fn missing_database_is_not_created() -> Result<()> {
         let tmp = tempfile::tempdir()?;
         let path = tmp.path().join("iopole.db");
-        let keys = InMemoryKeyStore::default();
 
-        execute(&path, &keys, &args(), &mut Vec::new())?;
+        execute(&path, &args(), &mut Vec::new())?;
 
         assert!(!path.exists());
-        assert!(keys.load_key()?.is_none());
         Ok(())
     }
 }

@@ -197,10 +197,7 @@ fn conditions(filter: &InvoiceFilter) -> (Vec<String>, Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::{
-        self,
-        testing::{InMemoryKeyStore, InvoiceRecord},
-    };
+    use crate::database::{self, testing::InvoiceRecord};
 
     struct Fixture {
         connection: Connection,
@@ -210,8 +207,7 @@ mod tests {
     impl Fixture {
         fn new() -> Result<Self> {
             let tmp = tempfile::tempdir()?;
-            let connection =
-                database::open(&tmp.path().join("iopole.db"), &InMemoryKeyStore::default())?;
+            let connection = database::open(&tmp.path().join("iopole.db"))?;
             Ok(Self {
                 connection,
                 _tmp: tmp,

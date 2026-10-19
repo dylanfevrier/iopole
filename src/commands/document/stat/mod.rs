@@ -12,7 +12,7 @@ use serde::Serialize;
 use super::DirectionFilter;
 use crate::Result;
 use crate::catalog::{self, StateCount};
-use crate::database::{self, DatabaseKeyStore};
+use crate::database;
 use crate::invoice::Direction;
 
 #[derive(Debug, ClapArgs)]
@@ -22,13 +22,8 @@ pub(crate) struct Args {
     pub(crate) direction: DirectionFilter,
 }
 
-pub(crate) fn execute(
-    database_path: &Path,
-    keys: &impl DatabaseKeyStore,
-    args: &Args,
-    out: &mut impl Write,
-) -> Result<()> {
-    let states = summarize(database_path, keys, args.direction.directions())?;
+pub(crate) fn execute(database_path: &Path, args: &Args, out: &mut impl Write) -> Result<()> {
+    let states = summarize(database_path, args.direction.directions())?;
     if states.is_empty() {
         return render::no_invoice(out);
     }
@@ -57,13 +52,12 @@ pub(crate) struct StatusCount {
 /// order; nothing without local database, which is not created.
 pub(crate) fn summarize(
     database_path: &Path,
-    keys: &impl DatabaseKeyStore,
     directions: &[Direction],
 ) -> Result<Vec<StateSummary>> {
     if !database_path.exists() {
         return Ok(Vec::new());
     }
-    let counts = catalog::count_by_state(&database::open(database_path, keys)?, directions)?;
+    let counts = catalog::count_by_state(&database::open(database_path)?, directions)?;
     Ok(group(counts))
 }
 
@@ -92,19 +86,15 @@ fn group(counts: Vec<StateCount>) -> Vec<StateSummary> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::database::testing::{InMemoryKeyStore, InvoiceRecord};
+    use crate::database::testing::InvoiceRecord;
 
-    fn stat(database_path: &Path, keys: &InMemoryKeyStore) -> Result<String> {
-        stat_with(database_path, keys, DirectionFilter::Both)
+    fn stat(database_path: &Path) -> Result<String> {
+        stat_with(database_path, DirectionFilter::Both)
     }
 
-    fn stat_with(
-        database_path: &Path,
-        keys: &InMemoryKeyStore,
-        direction: DirectionFilter,
-    ) -> Result<String> {
+    fn stat_with(database_path: &Path, direction: DirectionFilter) -> Result<String> {
         let mut out = Vec::new();
-        execute(database_path, keys, &Args { direction }, &mut out)?;
+        execute(database_path, &Args { direction }, &mut out)?;
         Ok(String::from_utf8_lossy(&out).into_owned())
     }
 
@@ -145,8 +135,7 @@ mod tests {
     fn counts_the_synchronized_invoices() -> Result<()> {
         let tmp = tempfile::tempdir()?;
         let path = tmp.path().join("iopole.db");
-        let keys = InMemoryKeyStore::default();
-        let connection = database::open(&path, &keys)?;
+        let connection = database::open(&path)?;
         for (id, status) in [
             ("01a1", Some("RECEIVED")),
             ("01a2", Some("RECEIVED")),
@@ -162,7 +151,7 @@ mod tests {
         }
 
         assert_eq!(
-            stat(&path, &keys)?,
+            stat(&path)?,
             "\
 STATE      STATUS       COUNT
 DELIVERED  -                3
@@ -179,8 +168,7 @@ DELIVERED  -                3
     fn counts_only_the_invoices_of_the_direction() -> Result<()> {
         let tmp = tempfile::tempdir()?;
         let path = tmp.path().join("iopole.db");
-        let keys = InMemoryKeyStore::default();
-        let connection = database::open(&path, &keys)?;
+        let connection = database::open(&path)?;
         for (id, direction) in [
             ("01a1", "INBOUND"),
             ("01a2", "OUTBOUND"),
@@ -194,9 +182,9 @@ DELIVERED  -                3
             .insert(&connection)?;
         }
 
-        assert!(stat_with(&path, &keys, DirectionFilter::Outbound)?.ends_with("\n2 invoices.\n"));
-        assert!(stat_with(&path, &keys, DirectionFilter::Inbound)?.ends_with("\n1 invoices.\n"));
-        assert!(stat(&path, &keys)?.ends_with("\n3 invoices.\n"));
+        assert!(stat_with(&path, DirectionFilter::Outbound)?.ends_with("\n2 invoices.\n"));
+        assert!(stat_with(&path, DirectionFilter::Inbound)?.ends_with("\n1 invoices.\n"));
+        assert!(stat(&path)?.ends_with("\n3 invoices.\n"));
         Ok(())
     }
 
@@ -204,9 +192,8 @@ DELIVERED  -                3
     fn invites_to_sync_without_database() -> Result<()> {
         let tmp = tempfile::tempdir()?;
         let path = tmp.path().join("iopole.db");
-        let keys = InMemoryKeyStore::default();
 
-        assert!(stat(&path, &keys)?.starts_with("No invoice synchronized yet.\n"));
+        assert!(stat(&path)?.starts_with("No invoice synchronized yet.\n"));
         assert!(!path.exists());
         Ok(())
     }

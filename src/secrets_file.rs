@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::credentials::{CredentialStore, Credentials};
-use crate::database::{self, DatabaseKeyStore};
+use crate::database;
 use crate::{Error, Result};
 
 const APP_DIR: &str = "iopole";
@@ -21,12 +21,11 @@ struct Secrets {
     client_id: Option<String>,
     client_secret: Option<String>,
     customer_id: Option<String>,
-    database_key: Option<String>,
 }
 
 impl Secrets {
     fn is_empty(&self) -> bool {
-        self.client_secret.is_none() && self.database_key.is_none()
+        self.client_secret.is_none()
     }
 }
 
@@ -81,7 +80,7 @@ impl SecretsFile {
     }
 
     /// Written aside then renamed, so that an interrupted write never loses
-    /// the database key.
+    /// the credentials.
     fn write(&self, secrets: &Secrets) -> Result<()> {
         if let Some(dir) = self.path.parent() {
             database::create_private_dir(dir)?;
@@ -158,24 +157,6 @@ impl CredentialStore for SecretsFile {
     }
 }
 
-impl DatabaseKeyStore for SecretsFile {
-    fn load_key(&self) -> Result<Option<SecretString>> {
-        Ok(self
-            .secrets()?
-            .database_key
-            .as_deref()
-            .map(SecretString::from))
-    }
-
-    fn save_key(&self, key: &SecretString) -> Result<()> {
-        self.update(|secrets| secrets.database_key = Some(key.expose_secret().to_owned()))
-    }
-
-    fn delete_key(&self) -> Result<()> {
-        self.update(|secrets| secrets.database_key.zeroize())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,21 +191,34 @@ mod tests {
     }
 
     #[test]
-    fn keeps_credentials_and_database_key_across_runs() -> Result<()> {
+    fn keeps_credentials_across_runs() -> Result<()> {
         let fixture = Fixture::new()?;
         fixture.store().save(&credentials())?;
-        fixture.store().save_key(&SecretString::from("abcd"))?;
 
-        let store = fixture.store();
-        let loaded = store.load()?.unwrap_or_else(|| panic!("credentials lost"));
+        let loaded = fixture
+            .store()
+            .load()?
+            .unwrap_or_else(|| panic!("credentials lost"));
 
         assert_eq!(loaded.client_id, "client-123");
         assert_eq!(loaded.client_secret.expose_secret(), "s3cr3t");
         assert_eq!(loaded.customer_id, "customer-456");
-        assert_eq!(
-            store.load_key()?.map(|key| key.expose_secret().to_owned()),
-            Some("abcd".to_owned())
-        );
+        Ok(())
+    }
+
+    #[test]
+    fn drops_the_database_key_left_by_earlier_versions() -> Result<()> {
+        let fixture = Fixture::new()?;
+        fixture.store().save(&credentials())?;
+        std::fs::write(
+            fixture.path(),
+            r#"{"client_id":"client-123","client_secret":"s3cr3t","customer_id":"customer-456","database_key":"abcd"}"#,
+        )?;
+
+        assert!(fixture.store().has_credentials()?);
+        fixture.store().delete()?;
+
+        assert!(!fixture.path().exists());
         Ok(())
     }
 
@@ -262,16 +256,13 @@ mod tests {
     }
 
     #[test]
-    fn logout_keeps_the_database_key_until_it_is_deleted() -> Result<()> {
+    fn logout_removes_the_file() -> Result<()> {
         let fixture = Fixture::new()?;
         fixture.store().save(&credentials())?;
-        fixture.store().save_key(&SecretString::from("abcd"))?;
 
         fixture.store().delete()?;
 
         assert!(!fixture.store().has_credentials()?);
-        assert!(fixture.store().load_key()?.is_some());
-        fixture.store().delete_key()?;
         assert!(!fixture.path().exists());
         Ok(())
     }
@@ -281,7 +272,6 @@ mod tests {
         let fixture = Fixture::new()?;
 
         assert!(!fixture.store().has_credentials()?);
-        assert!(fixture.store().load_key()?.is_none());
         assert!(!fixture.path().exists());
         Ok(())
     }

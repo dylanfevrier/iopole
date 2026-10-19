@@ -15,7 +15,6 @@ use crate::cli::parse_identifier_value;
 use crate::commands::document::search::{self, RoleFilter, parse_code};
 use crate::commands::document::stat::{self, StateSummary};
 use crate::commands::document::{DirectionFilter, parse_instant};
-use crate::secrets_file::SecretsFile;
 
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 200;
@@ -28,10 +27,10 @@ An invoice has a state, its processing state on the platform (VALID, DELIVERED, 
 its lifecycle status exchanged on the network (RECEIVED, APPROVED, REJECTED...), which may be missing.
 Companies are designated by the value of their electronic address without its scheme: a SIREN (9 digits), a SIRET or a BCE number.";
 
-pub(crate) fn serve(database_path: PathBuf, secrets_path: PathBuf) -> crate::Result<()> {
+pub(crate) fn serve(database_path: PathBuf) -> crate::Result<()> {
     let runtime = tokio::runtime::Runtime::new()?;
     runtime.block_on(async {
-        let server = IopoleServer::new(database_path, secrets_path)
+        let server = IopoleServer::new(database_path)
             .serve(rmcp::transport::stdio())
             .await
             .map_err(|err| Error::Mcp(err.to_string()))?;
@@ -46,7 +45,6 @@ pub(crate) fn serve(database_path: PathBuf, secrets_path: PathBuf) -> crate::Res
 #[derive(Debug, Clone)]
 pub(crate) struct IopoleServer {
     database_path: PathBuf,
-    secrets_path: PathBuf,
     tool_router: ToolRouter<Self>,
 }
 
@@ -135,10 +133,9 @@ pub(crate) struct InvoiceStatsOutput {
 
 #[tool_router(router = tool_router)]
 impl IopoleServer {
-    pub(crate) fn new(database_path: PathBuf, secrets_path: PathBuf) -> Self {
+    pub(crate) fn new(database_path: PathBuf) -> Self {
         Self {
             database_path,
-            secrets_path,
             tool_router: Self::tool_router(),
         }
     }
@@ -160,13 +157,12 @@ Use it to list or find invoices; use invoice_stats to count them.",
         &self,
         Parameters(input): Parameters<SearchInvoicesInput>,
     ) -> Result<Json<SearchInvoicesOutput>, String> {
-        let (database_path, secrets_path) = (self.database_path.clone(), self.secrets_path.clone());
+        let database_path = self.database_path.clone();
         blocking(move || {
             let filter = search_args(input)?
                 .filter()
                 .map_err(|err| err.to_string())?;
-            let page = search::find(&database_path, &SecretsFile::at(secrets_path), &filter)
-                .map_err(|err| err.to_string())?;
+            let page = search::find(&database_path, &filter).map_err(|err| err.to_string())?;
             Ok(search_output(page))
         })
         .await
@@ -190,15 +186,14 @@ Use it for totals and distributions rather than listing invoices.",
         &self,
         Parameters(input): Parameters<InvoiceStatsInput>,
     ) -> Result<Json<InvoiceStatsOutput>, String> {
-        let (database_path, secrets_path) = (self.database_path.clone(), self.secrets_path.clone());
+        let database_path = self.database_path.clone();
         let directions = input
             .direction
             .unwrap_or(DirectionFilter::Both)
             .directions();
         blocking(move || {
             let states =
-                stat::summarize(&database_path, &SecretsFile::at(secrets_path), directions)
-                    .map_err(|err| err.to_string())?;
+                stat::summarize(&database_path, directions).map_err(|err| err.to_string())?;
             let total = states.iter().map(|state| state.count).sum();
             Ok(InvoiceStatsOutput {
                 total,
@@ -222,7 +217,7 @@ impl ServerHandler for IopoleServer {
     }
 }
 
-/// The database and the secrets file are read synchronously, out of the
+/// The database is read synchronously, out of the
 /// threads serving the protocol.
 async fn blocking<T: Send + 'static>(
     work: impl FnOnce() -> Result<T, String> + Send + 'static,
@@ -308,8 +303,6 @@ fn summary(invoice: InvoiceRow) -> InvoiceSummary {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use super::*;
     use crate::database::{self, testing::InvoiceRecord};
 
@@ -328,16 +321,9 @@ mod tests {
             self.tmp.path().join("data").join("iopole.db")
         }
 
-        fn secrets_path(&self) -> PathBuf {
-            self.tmp.path().join("config").join("secrets.json")
-        }
-
         fn with(records: &[InvoiceRecord<'_>]) -> Result<Self, Error> {
             let fixture = Self::new()?;
-            let connection = database::open(
-                &fixture.database_path(),
-                &SecretsFile::at(fixture.secrets_path()),
-            )?;
+            let connection = database::open(&fixture.database_path())?;
             for record in records {
                 record.insert(&connection)?;
             }
@@ -345,7 +331,7 @@ mod tests {
         }
 
         fn server(&self) -> IopoleServer {
-            IopoleServer::new(self.database_path(), self.secrets_path())
+            IopoleServer::new(self.database_path())
         }
     }
 
@@ -394,7 +380,7 @@ mod tests {
 
     #[test]
     fn exposes_two_read_only_local_tools_with_output_schemas() {
-        let server = IopoleServer::new(PathBuf::new(), PathBuf::new());
+        let server = IopoleServer::new(PathBuf::new());
         let mut tools = server.tool_router.list_all();
         tools.sort_by(|a, b| a.name.cmp(&b.name));
 
@@ -556,7 +542,6 @@ mod tests {
             assert!(note.is_some_and(|note| note.contains("iopole document sync")));
         }
         assert!(!fixture.database_path().exists());
-        assert!(!Path::new(&fixture.secrets_path()).exists());
         Ok(())
     }
 }

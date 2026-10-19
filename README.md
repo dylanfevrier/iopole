@@ -1,6 +1,30 @@
 # iopole
 
-Command-line tool for the Iopole platform.
+Outil en ligne de commande pour la plateforme Iopole.
+
+## Sommaire
+
+- [Installation](#installation)
+  1. [Installer les outils de compilation](#1-installer-les-outils-de-compilation)
+  2. [Installer Rust](#2-installer-rust)
+  3. [Récupérer les sources](#3-récupérer-les-sources)
+  4. [Compiler et installer `iopole`](#4-compiler-et-installer-iopole)
+  5. [Se connecter à Iopole](#5-se-connecter-à-iopole)
+  6. [Synchroniser les factures](#6-synchroniser-les-factures)
+  7. [Explorer les factures](#7-explorer-les-factures)
+  8. [Autres usages](#8-autres-usages)
+- [Utilisation](#utilisation)
+  - [Authentification](#authentification)
+  - [document sync](#document-sync)
+  - [document search](#document-search)
+  - [document stat](#document-stat)
+  - [document status](#document-status)
+  - [entity search](#entity-search)
+  - [entity update-claim](#entity-update-claim)
+  - [entity register](#entity-register)
+  - [directory french](#directory-french)
+- [Serveur MCP](#serveur-mcp)
+- [Développement](#développement)
 
 ## Installation
 
@@ -9,28 +33,26 @@ local, sur macOS ou Linux.
 
 ### 1. Installer les outils de compilation
 
-La base locale est chiffrée avec SQLCipher, compilé depuis ses sources C
-pendant la construction : il faut donc un compilateur C.
+SQLite et la bibliothèque TLS sont compilés depuis leurs sources C pendant la
+construction : il faut donc un compilateur C.
 
-- **macOS** : installer les outils en ligne de commande de Xcode (le
-  chiffrement utilise CommonCrypto, fourni par le système, rien d'autre à
-  installer) :
+- **macOS** : installer les outils en ligne de commande de Xcode :
 
   ```sh
   xcode-select --install
   ```
 
-- **Debian / Ubuntu** : installer un compilateur et les en-têtes OpenSSL :
+- **Debian / Ubuntu** :
 
   ```sh
   sudo apt update
-  sudo apt install build-essential pkg-config libssl-dev git curl
+  sudo apt install build-essential git curl
   ```
 
 - **Fedora** :
 
   ```sh
-  sudo dnf install gcc make pkgconf-pkg-config openssl-devel git curl
+  sudo dnf install gcc make git curl
   ```
 
 ### 2. Installer Rust
@@ -67,7 +89,7 @@ cd iopole
 cargo install --path .
 ```
 
-La première compilation télécharge les dépendances et compile SQLCipher : elle
+La première compilation télécharge les dépendances et compile SQLite : elle
 prend quelques minutes. Le binaire est installé dans `~/.cargo/bin`, que rustup
 a ajouté au `PATH`. Vérifier :
 
@@ -90,7 +112,7 @@ iopole auth login
 
 Les trois valeurs sont demandées l'une après l'autre (le secret ne s'affiche
 pas) et enregistrées dans `~/.config/iopole/secrets.json`, lisible par vous
-seul. Voir [Auth](#auth).
+seul. Voir [Authentification](#authentification).
 
 ### 6. Synchroniser les factures
 
@@ -109,7 +131,7 @@ Une barre de progression s'affiche, puis le nombre de factures récupérées :
 ```
 
 La même commande peut être relancée à tout moment : elle ne récupère que ce
-qui manque depuis la dernière fois. Voir [Document sync](#document-sync) pour
+qui manque depuis la dernière fois. Voir [document sync](#document-sync) pour
 `--to`, `--direction` et `--refresh`.
 
 ### 7. Explorer les factures
@@ -145,8 +167,8 @@ iopole document status 01a10b05-e3fd-74c8-b9cd-ce8e4c012777
 iopole document sync --from 2026-09-01 --refresh
 ```
 
-Voir [Document search](#document-search), [Document status](#document-status)
-et [Document sync](#document-sync).
+Voir [document search](#document-search), [document status](#document-status)
+et [document sync](#document-sync).
 
 **Entités de l'opérateur**
 
@@ -161,8 +183,8 @@ iopole entity update-claim 980217632 --company-uid 6071797
 iopole entity register 982740128
 ```
 
-Voir [Entity search](#entity-search), [Entity claim update](#entity-claim-update)
-et [Entity registration](#entity-registration).
+Voir [entity search](#entity-search), [entity update-claim](#entity-update-claim)
+et [entity register](#entity-register).
 
 **Annuaire français**
 
@@ -172,7 +194,7 @@ iopole directory french 352862346
 iopole directory french --name "BVS RENO*"
 ```
 
-Voir [French directory](#french-directory).
+Voir [directory french](#directory-french).
 
 **Assistants IA**
 
@@ -181,20 +203,20 @@ Voir [French directory](#french-directory).
 claude mcp add iopole -- iopole mcp
 ```
 
-Voir [MCP server](#mcp-server) pour Codex et Claude Desktop.
+Voir [Serveur MCP](#serveur-mcp) pour Codex et Claude Desktop.
 
 **Déconnexion**
 
 ```sh
-# Supprimer les identifiants, la base locale et sa clé
+# Supprimer les identifiants et la base locale
 iopole auth logout
 ```
+
+## Utilisation
 
 Les commandes ci-dessous sont écrites avec `cargo run --`, pour les lancer
 depuis les sources sans installer ; une fois `iopole` installé, remplacer
 `cargo run --` par `iopole`.
-
-## Usage
 
 ```sh
 cargo run -- --help
@@ -211,53 +233,67 @@ cargo run -- directory french 352862346
 cargo run -- mcp
 ```
 
-### Auth
+### Authentification
 
-`auth login` asks for the Iopole client, secret and customer ID, and stores
-them in clear in `~/.config/iopole/secrets.json`, readable only by its owner
-(file `600`, directory `700`). The encryption key of the local database lives
-in the same file. Every command refuses to read the file once other users can
-read it.
+`auth login` demande le client, le secret et le customer ID Iopole, et les
+enregistre en clair dans `~/.config/iopole/secrets.json`, lisible uniquement
+par son propriétaire (fichier en `600`, dossier en `700`). Toutes les
+commandes refusent de lire le fichier dès que d'autres utilisateurs peuvent le
+lire.
 
-`auth logout` removes the credentials, the local database and its key; the file
-goes away with them.
+`auth logout` supprime les identifiants et la base locale ; le fichier
+disparaît avec eux.
 
-### Document sync
+### document sync
 
-`document sync` stores the general information of Iopole invoices (never payment
-means) in an encrypted SQLite database whose key lives in the secrets file.
+`document sync` enregistre les informations générales des factures Iopole
+(jamais les moyens de paiement) dans une base SQLite locale,
+`~/.local/share/iopole/iopole.db`, lisible uniquement par son propriétaire
+(fichier en `600`, dossier en `700`). La base n'est pas chiffrée : elle
+s'ouvre avec n'importe quel outil SQLite, par exemple
+`sqlite3 ~/.local/share/iopole/iopole.db`. Pour protéger les données en cas de
+vol de la machine, activer le chiffrement du disque (FileVault sur macOS,
+LUKS sur Linux).
 
-- Invoices are searched by ranges of their UUID v7 identifier, one day at a
-  time; days holding more than the 1200 results a search returns are halved
-  down to one minute.
-- Each search also replays the last 10% of the previous window, so that no
-  invoice falls between two searches. Invoices found again only get their
-  status refreshed, and only when it is not older than the stored one.
-- Ranges already synchronized are never searched again: running
-  `document sync` twice only fills the gaps. The last hour stays open and is
-  searched again by the next run.
-- `--refresh` searches the whole period again, ranges already synchronized
-  included, and rewrites every stored invoice that differs from what Iopole
-  returns now: status, business data and raw JSON alike, even when the status
-  looks older. It then also tells how many invoices were updated.
-- Production is used by default. Set `IOPOLE_AUTH_URL` and `IOPOLE_PDP_URL`
-  (and optionally `IOPOLE_AUTH_ENDPOINT`) to target another environment, for
-  instance `https://auth.ppd.iopole.fr` and `https://api.ppd.iopole.fr`.
+Les versions précédentes chiffraient la base : `iopole` refuse de l'ouvrir et
+demande de la supprimer. Supprimer le fichier (ou lancer `iopole auth logout`
+puis `iopole auth login`), puis relancer `iopole document sync`.
 
-`document sync` shows its progress, then the number of invoices retrieved:
+- Les factures sont recherchées par plages de leur identifiant UUID v7, un
+  jour à la fois ; les jours qui dépassent les 1200 résultats que renvoie une
+  recherche sont coupés en deux, jusqu'à une minute.
+- Chaque recherche reprend aussi les derniers 10 % de la fenêtre précédente,
+  pour qu'aucune facture ne tombe entre deux recherches. Les factures
+  retrouvées ne voient que leur statut mis à jour, et seulement s'il n'est pas
+  plus ancien que celui enregistré.
+- Les plages déjà synchronisées ne sont jamais recherchées de nouveau : lancer
+  `document sync` deux fois ne fait que combler les trous. La dernière heure
+  reste ouverte et est recherchée de nouveau au lancement suivant.
+- `--refresh` recherche de nouveau toute la période, plages déjà synchronisées
+  comprises, et réécrit chaque facture enregistrée qui diffère de ce que
+  renvoie Iopole maintenant : statut, données métier et JSON brut, même quand
+  le statut paraît plus ancien. La commande indique alors aussi combien de
+  factures ont été mises à jour.
+- La production est utilisée par défaut. Définir `IOPOLE_AUTH_URL` et
+  `IOPOLE_PDP_URL` (et éventuellement `IOPOLE_AUTH_ENDPOINT`) pour viser un
+  autre environnement, par exemple `https://auth.ppd.iopole.fr` et
+  `https://api.ppd.iopole.fr`.
+
+`document sync` affiche sa progression, puis le nombre de factures
+récupérées :
 
 ```
 ████████████████████████████████████████ 100%
 1234 invoices retrieved. 1000 inbound. 234 outbound.
 ```
 
-### Document search
+### document search
 
-`document search` looks for the invoices of a company, as seller or buyer, in
-the local database only. It matches the value of the electronic address whatever its
-scheme: `352862346` finds `0225:352862346` and `0002:352862346`, `0123456789`
-finds `0208:0123456789`. Without it, the search covers every company, and
-`--role` is refused.
+`document search` cherche les factures d'une entreprise, comme vendeur ou
+acheteur, uniquement dans la base locale. Il compare la valeur de l'adresse
+électronique quel que soit son schéma : `352862346` trouve `0225:352862346` et
+`0002:352862346`, `0123456789` trouve `0208:0123456789`. Sans identifiant, la
+recherche couvre toutes les entreprises, et `--role` est refusé.
 
 ```sh
 cargo run -- document search [352862346 [--role seller|buyer]] [--direction inbound|outbound|both] \
@@ -265,19 +301,21 @@ cargo run -- document search [352862346 [--role seller|buyer]] [--direction inbo
     [--identifiers]
 ```
 
-`--identifiers` shows the seller and the buyer as `352862346 - CCLS`, so that
-the identifier can be passed to `entity search`.
+`--identifiers` affiche le vendeur et l'acheteur sous la forme
+`352862346 - CCLS`, pour pouvoir passer l'identifiant à `entity search`.
 
-When nothing matches, it suggests the `document sync` command to run.
+Quand rien ne correspond, la commande suggère la commande `document sync` à
+lancer.
 
-`--json` prints the matching invoices as Iopole returned them when
-synchronized, pretty-printed, as a list (`[]` when nothing matches).
+`--json` affiche les factures trouvées telles qu'Iopole les a renvoyées lors de
+la synchronisation, indentées, sous forme de liste (`[]` quand rien ne
+correspond).
 
-### Document stat
+### document stat
 
-`document stat` counts the invoices of the local database by state, each
-detailed by last status, the most frequent first. `--direction` keeps one
-invoice flow; it counts both by default:
+`document stat` compte les factures de la base locale par état, chacun détaillé
+par dernier statut, du plus fréquent au moins fréquent. `--direction` garde un
+seul flux de factures ; par défaut, les deux sont comptés :
 
 ```
 STATE          STATUS       COUNT
@@ -290,10 +328,11 @@ WRONG_ROUTING  -             3000
 4000 invoices.
 ```
 
-### Document status
+### document status
 
-`document status` asks Iopole, live, for the status history of an invoice,
-given its UUID as shown by `document search`, most recent first:
+`document status` demande à Iopole, en direct, l'historique des statuts d'une
+facture, à partir de son UUID tel qu'affiché par `document search`, du plus
+récent au plus ancien :
 
 ```
 ID:           01a10b05-e3fd-74c8-b9cd-ce8e4c012777
@@ -304,61 +343,65 @@ DATE (UTC)           STATUS
 2026-10-05 09:45:07  PAYMENT_RECEIVED (212)
 ```
 
-- The history only holds the lifecycle statuses exchanged on the network. The
-  statuses of the platform, such as `MADE_AVAILABLE` or `REJECTED`, are not in
-  it: an invoice may show them in `document search` and have no history.
-- Statuses name the parties generically (`VENDEUR`, `ACHETEUR`): the names come
-  from the local database when the invoice is synchronized, the SIRENs from
-  the statuses.
-- Iopole answers an unknown UUID with an empty history, as for an invoice
-  without status.
-- `--json` prints the history as Iopole returns it, pretty-printed, without
-  reading the local database.
+- L'historique ne contient que les statuts du cycle de vie échangés sur le
+  réseau. Les statuts de la plateforme, comme `MADE_AVAILABLE` ou `REJECTED`,
+  n'y figurent pas : une facture peut les afficher dans `document search` et
+  n'avoir aucun historique.
+- Les statuts désignent les parties de façon générique (`VENDEUR`,
+  `ACHETEUR`) : les noms viennent de la base locale quand la facture est
+  synchronisée, les SIREN viennent des statuts.
+- Iopole répond à un UUID inconnu par un historique vide, comme pour une
+  facture sans statut.
+- `--json` affiche l'historique tel qu'Iopole le renvoie, indenté, sans lire la
+  base locale.
 
-### Entity search
+### entity search
 
-`entity search` asks Iopole, live, which of the operator's business entities
-have the given identifier value (SIREN, SIRET, BCE...). It shows them like
-`directory french` does, with the company UID and the country, and the date
-each address is available since on every network. It tells when the company is
-not registered.
+`entity search` demande à Iopole, en direct, quelles entités de l'opérateur ont
+la valeur d'identifiant donnée (SIREN, SIRET, BCE...). Il les affiche comme
+`directory french`, avec le company UID, le pays, et pour chaque réseau la date
+depuis laquelle chaque adresse est disponible. Il indique quand l'entreprise
+n'est pas enregistrée.
 
-`--json` prints the matching entities as Iopole returns them, pretty-printed,
-as a list (`[]` when nothing matches).
+`--json` affiche les entités trouvées telles qu'Iopole les renvoie, indentées,
+sous forme de liste (`[]` quand rien ne correspond).
 
-### Entity claim update
+### entity update-claim
 
-`entity update-claim` replaces, live, how the operator claims one of its
-business entities. It finds the entity by its identifier value (SIREN, SIRET,
-BCE...) as `entity search` does, and refuses when none or several match:
+`entity update-claim` remplace, en direct, la façon dont l'opérateur revendique
+une de ses entités. Il trouve l'entité par sa valeur d'identifiant (SIREN,
+SIRET, BCE...) comme `entity search`, et refuse quand aucune ou plusieurs
+correspondent :
 
-- `--company-uid` (required) is sent back by Iopole in the `X-Company-UID`
-  header of the webhooks about this entity.
-- `--direction` restricts the claim to one invoice flow; it covers both by
-  default.
+- `--company-uid` (obligatoire) est renvoyé par Iopole dans l'en-tête
+  `X-Company-UID` des webhooks concernant cette entité.
+- `--direction` limite la revendication à un seul flux de factures ; par
+  défaut, elle couvre les deux.
 
-Iopole replaces the whole configuration: any other header, query or path
-parameter set on the claim is removed. It needs the `admin` role.
+Iopole remplace toute la configuration : tout autre en-tête, paramètre de
+requête ou de chemin défini sur la revendication est supprimé. Le rôle `admin`
+est nécessaire.
 
-### Entity registration
+### entity register
 
-`entity register` publishes, live, an identifier of one of the operator's
-business entities on the e-invoicing networks, so that other platforms route
-invoices to it. It finds the entity by its identifier value as
-`entity update-claim` does, and registers the identifier under the scheme Iopole
-knows it by (`0002` for a SIREN). `--network` picks `domestic-fr` (the French
-directory) or `peppol-international`; it registers on both by default, the
-French directory first.
+`entity register` publie, en direct, un identifiant d'une des entités de
+l'opérateur sur les réseaux de facturation électronique, pour que les autres
+plateformes lui acheminent les factures. Il trouve l'entité par sa valeur
+d'identifiant comme `entity update-claim`, et enregistre l'identifiant sous le
+schéma qu'Iopole lui connaît (`0002` pour un SIREN). `--network` choisit
+`domestic-fr` (l'annuaire français) ou `peppol-international` ; par défaut, il
+enregistre sur les deux, l'annuaire français d'abord.
 
-A network that already publishes the identifier is reported as
-`already up to date` and the next one is still registered. Run
-`entity search` afterwards to see the networks the identifier is available on.
+Un réseau qui publie déjà l'identifiant est signalé par `already up to date`,
+et le suivant est quand même enregistré. Lancer `entity search` ensuite pour
+voir sur quels réseaux l'identifiant est disponible.
 
-### French directory
+### directory french
 
-`directory french` searches the French e-invoicing directory (annuaire), live,
-for any company, client of the operator or not. It takes a SIREN by default, or
-other criteria, combined when several are given:
+`directory french` cherche, en direct, dans l'annuaire français de la
+facturation électronique, n'importe quelle entreprise, cliente de l'opérateur
+ou non. Il prend un SIREN par défaut, ou d'autres critères, combinés quand il
+y en a plusieurs :
 
 ```sh
 cargo run -- directory french 352862346
@@ -366,9 +409,9 @@ cargo run -- directory french --name OBAT [--siret 35286234600012] [--type legal
     [--limit 20] [--offset 0] [--json]
 ```
 
-`--name` is case insensitive, needs at least 3 characters and accepts the `*`
-wildcard (`--name "BVS RENO*"`). Platform details are requested
-(`withPlatformDetails`). Each entry shows:
+`--name` ne tient pas compte de la casse, demande au moins 3 caractères et
+accepte le joker `*` (`--name "BVS RENO*"`). Les détails de plateforme sont
+demandés (`withPlatformDetails`). Chaque entrée affiche :
 
 ```
 Name:         MUCHA CONCIERGERIE
@@ -380,29 +423,30 @@ TYPE               IDENTIFIER           NETWORK
 OFFICE_IDENTIFIER  0009:94487043500012  -
 ```
 
-Entries are separated by a line of `=`. An identifier registered on several
-networks takes one row per network. A column
-empty on every row, such as `AVAILABLE SINCE` when the directory omits that date,
-is left out.
+Les entrées sont séparées par une ligne de `=`. Un identifiant enregistré sur
+plusieurs réseaux occupe une ligne par réseau. Une colonne vide sur toutes les
+lignes, comme `AVAILABLE SINCE` quand l'annuaire omet cette date, n'est pas
+affichée.
 
-The directory does
-not give the total number of matches: when a page is full, the command tells
-which `--offset` shows the next one.
+L'annuaire ne donne pas le nombre total de résultats : quand une page est
+pleine, la commande indique quel `--offset` affiche la suivante.
 
-`--json` prints the response of Iopole as received, indented, instead of the
-entries, e.g. to debug or to pipe into `jq`.
+`--json` affiche la réponse d'Iopole telle que reçue, indentée, au lieu des
+entrées, par exemple pour déboguer ou pour la passer à `jq`.
 
-## MCP server
+## Serveur MCP
 
-`iopole mcp` serves the local invoices to AI assistants as MCP tools over
-stdio. It never calls Iopole: the invoices come from `document sync`.
+`iopole mcp` met les factures locales à disposition des assistants IA, sous
+forme d'outils MCP sur stdio. Il n'appelle jamais Iopole : les factures
+viennent de `document sync`.
 
-| Tool | Does |
+| Outil | Rôle |
 |---|---|
-| `search_invoices` | lists invoices like `document search`, as JSON |
-| `invoice_stats` | counts invoices by state and last status like `document stat` |
+| `search_invoices` | liste les factures comme `document search`, en JSON |
+| `invoice_stats` | compte les factures par état et dernier statut comme `document stat` |
 
-Both are read-only. Once `iopole` is installed (see [Installation](#installation)):
+Les deux sont en lecture seule. Une fois `iopole` installé (voir
+[Installation](#installation)) :
 
 ```sh
 # Claude Code
@@ -410,20 +454,20 @@ claude mcp add iopole -- iopole mcp
 ```
 
 ```toml
-# Codex: ~/.codex/config.toml
+# Codex : ~/.codex/config.toml
 [mcp_servers.iopole]
 command = "iopole"
 args = ["mcp"]
 ```
 
 ```json
-// Claude Desktop: claude_desktop_config.json, with the absolute path
-{ "mcpServers": { "iopole": { "command": "/Users/<you>/.cargo/bin/iopole", "args": ["mcp"] } } }
+// Claude Desktop : claude_desktop_config.json, avec le chemin absolu
+{ "mcpServers": { "iopole": { "command": "/Users/<vous>/.cargo/bin/iopole", "args": ["mcp"] } } }
 ```
 
-To try the tools by hand: `npx @modelcontextprotocol/inspector iopole mcp`.
+Pour essayer les outils à la main : `npx @modelcontextprotocol/inspector iopole mcp`.
 
-## Development
+## Développement
 
 ```sh
 cargo fmt --check

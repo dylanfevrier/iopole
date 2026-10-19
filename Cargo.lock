@@ -799,7 +799,6 @@ dependencies = [
  "clap",
  "dialoguer",
  "etcetera",
- "getrandom 0.4.3",
  "indicatif",
  "jiff",
  "predicates",

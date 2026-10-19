@@ -26,17 +26,11 @@ pub enum Error {
     #[error("database failure: {0}")]
     Database(#[from] rusqlite::Error),
 
-    #[error("cannot generate database key: {0}")]
-    KeyGeneration(#[from] getrandom::Error),
-
     #[error(
-        "encryption key for {} is missing from the secrets file; run `iopole auth logout` to delete the database, then log in and run `iopole document sync` again",
+        "{} is not a readable database (earlier versions encrypted it); delete it, then run `iopole document sync` again",
         .0.display()
     )]
-    MissingDatabaseKey(PathBuf),
-
-    #[error("cannot decrypt {} with the key from the secrets file", .0.display())]
-    InvalidDatabaseKey(PathBuf),
+    UnreadableDatabase(PathBuf),
 
     #[error("database schema version {0} is newer than this tool supports")]
     UnsupportedSchema(i64),

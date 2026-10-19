@@ -13,11 +13,10 @@ readme = "README.md"
 clap = { version = "4.6.7", features = ["derive"] }
 dialoguer = { version = "0.12.0", default-features = false, features = ["password"] }
 etcetera = "0.11.0"
-getrandom = "0.4.3"
 indicatif = "0.18.6"
 jiff = "0.2.38"
 rmcp = { version = "3.5.1", features = ["server", "transport-io", "macros"] }
-rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 schemars = "1.2.2"
 secrecy = "0.10.3"
 serde = { version = "1.0.229", features = ["derive"] }

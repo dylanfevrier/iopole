@@ -7,7 +7,7 @@ use super::Progress;
 use super::store::SqliteInvoiceStore;
 use super::window::TimeWindow;
 use crate::Result;
-use crate::database::{self, testing::InMemoryKeyStore};
+use crate::database;
 use crate::invoice::Status;
 
 pub(crate) fn window(start: &str, end: &str) -> TimeWindow {
@@ -30,7 +30,6 @@ impl Progress for RecordedProgress {
 pub(crate) struct TempStore {
     pub(crate) store: SqliteInvoiceStore,
     path: PathBuf,
-    keys: InMemoryKeyStore,
     _tmp: tempfile::TempDir,
 }
 
@@ -38,18 +37,16 @@ impl TempStore {
     pub(crate) fn new() -> Result<Self> {
         let tmp = tempfile::tempdir()?;
         let path = tmp.path().join("iopole.db");
-        let keys = InMemoryKeyStore::default();
-        let store = SqliteInvoiceStore::new(database::open(&path, &keys)?);
+        let store = SqliteInvoiceStore::new(database::open(&path)?);
         Ok(Self {
             store,
             path,
-            keys,
             _tmp: tmp,
         })
     }
 
     fn connection(&self) -> Result<Connection> {
-        database::open(&self.path, &self.keys)
+        database::open(&self.path)
     }
 
     pub(crate) fn invoice_ids(&self) -> Result<Vec<String>> {

@@ -26,19 +26,18 @@ use secrets_file::SecretsFile;
 pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
     let secrets = SecretsFile::at(SecretsFile::default_path()?);
     match &cli.command {
-        Command::Mcp => mcp::serve(database::default_path()?, SecretsFile::default_path()?),
+        Command::Mcp => mcp::serve(database::default_path()?),
         Command::Auth {
             command: auth::Command::Login,
         } => auth::login::execute(&secrets, auth::login::prompt_credentials, out),
         Command::Auth {
             command: auth::Command::Logout,
-        } => auth::logout::execute(&secrets, &database::default_path()?, &secrets, out),
+        } => auth::logout::execute(&secrets, &database::default_path()?, out),
         Command::Document {
             command: document::Command::Sync(args),
         } => commands::document::sync::execute(
             &secrets,
             &database::default_path()?,
-            &secrets,
             |credentials| HttpClient::new(Endpoints::from_env(), credentials),
             &SystemClock,
             args,
@@ -46,16 +45,15 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         ),
         Command::Document {
             command: document::Command::Search(args),
-        } => commands::document::search::execute(&database::default_path()?, &secrets, args, out),
+        } => commands::document::search::execute(&database::default_path()?, args, out),
         Command::Document {
             command: document::Command::Stat(args),
-        } => commands::document::stat::execute(&database::default_path()?, &secrets, args, out),
+        } => commands::document::stat::execute(&database::default_path()?, args, out),
         Command::Document {
             command: document::Command::Status(args),
         } => commands::document::status::execute(
             &secrets,
             &database::default_path()?,
-            &secrets,
             |credentials| HttpClient::new(Endpoints::from_env(), credentials),
             args,
             out,
