@@ -1,14 +1,19 @@
 mod render;
 
+use std::cmp::Reverse;
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::Path;
 
 use clap::Args as ClapArgs;
+use schemars::JsonSchema;
+use serde::Serialize;
 
 use super::DirectionFilter;
 use crate::Result;
-use crate::catalog;
+use crate::catalog::{self, StateCount};
 use crate::database::{self, DatabaseKeyStore};
+use crate::invoice::Direction;
 
 #[derive(Debug, ClapArgs)]
 pub(crate) struct Args {
@@ -23,18 +28,65 @@ pub(crate) fn execute(
     args: &Args,
     out: &mut impl Write,
 ) -> Result<()> {
-    let counts = if database_path.exists() {
-        catalog::count_by_state(
-            &database::open(database_path, keys)?,
-            args.direction.directions(),
-        )?
-    } else {
-        Vec::new()
-    };
-    if counts.is_empty() {
+    let states = summarize(database_path, keys, args.direction.directions())?;
+    if states.is_empty() {
         return render::no_invoice(out);
     }
-    render::counts(out, counts)
+    render::states(out, &states)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub(crate) struct StateSummary {
+    /// Iopole processing state, e.g. `DELIVERED` or `WRONG_ROUTING`.
+    pub(crate) state: String,
+    /// Invoices in this state.
+    pub(crate) count: usize,
+    /// The same invoices by last lifecycle status, most frequent first.
+    pub(crate) statuses: Vec<StatusCount>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub(crate) struct StatusCount {
+    /// Last lifecycle status exchanged on the network, e.g. `RECEIVED`; null
+    /// when none was exchanged yet.
+    pub(crate) status: Option<String>,
+    pub(crate) count: usize,
+}
+
+/// The synchronized invoices of these directions by state, in alphabetical
+/// order; nothing without local database, which is not created.
+pub(crate) fn summarize(
+    database_path: &Path,
+    keys: &impl DatabaseKeyStore,
+    directions: &[Direction],
+) -> Result<Vec<StateSummary>> {
+    if !database_path.exists() {
+        return Ok(Vec::new());
+    }
+    let counts = catalog::count_by_state(&database::open(database_path, keys)?, directions)?;
+    Ok(group(counts))
+}
+
+fn group(counts: Vec<StateCount>) -> Vec<StateSummary> {
+    let mut states: BTreeMap<String, Vec<StatusCount>> = BTreeMap::new();
+    for count in counts {
+        states.entry(count.state).or_default().push(StatusCount {
+            status: count.last_status_code,
+            count: count.count,
+        });
+    }
+    states
+        .into_iter()
+        .map(|(state, mut statuses)| {
+            statuses
+                .sort_by(|a, b| (Reverse(a.count), &a.status).cmp(&(Reverse(b.count), &b.status)));
+            StateSummary {
+                state,
+                count: statuses.iter().map(|status| status.count).sum(),
+                statuses,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -54,6 +106,39 @@ mod tests {
         let mut out = Vec::new();
         execute(database_path, keys, &Args { direction }, &mut out)?;
         Ok(String::from_utf8_lossy(&out).into_owned())
+    }
+
+    #[test]
+    fn groups_states_alphabetically_and_statuses_most_frequent_first() {
+        let count = |state: &str, status: Option<&str>, count| StateCount {
+            state: state.to_owned(),
+            last_status_code: status.map(str::to_owned),
+            count,
+        };
+        let status = |status: Option<&str>, count| StatusCount {
+            status: status.map(str::to_owned),
+            count,
+        };
+
+        assert_eq!(
+            group(vec![
+                count("WRONG_ROUTING", None, 3000),
+                count("DELIVERED", Some("ISSUED"), 420),
+                count("DELIVERED", Some("RECEIVED"), 580),
+            ]),
+            [
+                StateSummary {
+                    state: "DELIVERED".to_owned(),
+                    count: 1000,
+                    statuses: vec![status(Some("RECEIVED"), 580), status(Some("ISSUED"), 420)],
+                },
+                StateSummary {
+                    state: "WRONG_ROUTING".to_owned(),
+                    count: 3000,
+                    statuses: vec![status(None, 3000)],
+                },
+            ]
+        );
     }
 
     #[test]

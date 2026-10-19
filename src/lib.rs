@@ -7,6 +7,7 @@ mod database;
 mod error;
 mod invoice;
 mod iopole;
+mod mcp;
 mod render;
 mod secrets_file;
 mod sync;
@@ -25,6 +26,7 @@ use secrets_file::SecretsFile;
 pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
     let secrets = SecretsFile::at(SecretsFile::default_path()?);
     match &cli.command {
+        Command::Mcp => mcp::serve(database::default_path()?, SecretsFile::default_path()?),
         Command::Auth {
             command: auth::Command::Login,
         } => auth::login::execute(&secrets, auth::login::prompt_credentials, out),
@@ -61,6 +63,14 @@ pub fn run(cli: &Cli, out: &mut impl Write) -> Result<()> {
         Command::Entity {
             command: entity::Command::UpdateClaim(args),
         } => commands::entity::update_claim::execute(
+            &secrets,
+            |credentials| HttpClient::new(Endpoints::from_env(), credentials),
+            args,
+            out,
+        ),
+        Command::Entity {
+            command: entity::Command::Register(args),
+        } => commands::entity::register::execute(
             &secrets,
             |credentials| HttpClient::new(Endpoints::from_env(), credentials),
             args,

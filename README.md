@@ -14,7 +14,9 @@ cargo run -- document stat [--direction inbound|outbound|both]
 cargo run -- document status 01a10b05-e3fd-74c8-b9cd-ce8e4c012777
 cargo run -- entity search 352862346
 cargo run -- entity update-claim 980217632 --company-uid 6071797 [--direction inbound|outbound|both]
+cargo run -- entity register 982740128 [--network domestic-fr|peppol-international|both]
 cargo run -- directory french 352862346
+cargo run -- mcp
 ```
 
 ### Auth
@@ -146,6 +148,20 @@ BCE...) as `entity search` does, and refuses when none or several match:
 Iopole replaces the whole configuration: any other header, query or path
 parameter set on the claim is removed. It needs the `admin` role.
 
+### Entity registration
+
+`entity register` publishes, live, an identifier of one of the operator's
+business entities on the e-invoicing networks, so that other platforms route
+invoices to it. It finds the entity by its identifier value as
+`entity update-claim` does, and registers the identifier under the scheme Iopole
+knows it by (`0002` for a SIREN). `--network` picks `domestic-fr` (the French
+directory) or `peppol-international`; it registers on both by default, the
+French directory first.
+
+A network that already publishes the identifier is reported as
+`already up to date` and the next one is still registered. Run
+`entity search` afterwards to see the networks the identifier is available on.
+
 ### French directory
 
 `directory french` searches the French e-invoicing directory (annuaire), live,
@@ -183,6 +199,37 @@ which `--offset` shows the next one.
 
 `--json` prints the response of Iopole as received, indented, instead of the
 entries, e.g. to debug or to pipe into `jq`.
+
+## MCP server
+
+`iopole mcp` serves the local invoices to AI assistants as MCP tools over
+stdio. It never calls Iopole: the invoices come from `document sync`.
+
+| Tool | Does |
+|---|---|
+| `search_invoices` | lists invoices like `document search`, as JSON |
+| `invoice_stats` | counts invoices by state and last status like `document stat` |
+
+Both are read-only. After `cargo install --path .`:
+
+```sh
+# Claude Code
+claude mcp add iopole -- iopole mcp
+```
+
+```toml
+# Codex: ~/.codex/config.toml
+[mcp_servers.iopole]
+command = "iopole"
+args = ["mcp"]
+```
+
+```json
+// Claude Desktop: claude_desktop_config.json, with the absolute path
+{ "mcpServers": { "iopole": { "command": "/Users/<you>/.cargo/bin/iopole", "args": ["mcp"] } } }
+```
+
+To try the tools by hand: `npx @modelcontextprotocol/inspector iopole mcp`.
 
 ## Installation
 

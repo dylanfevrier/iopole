@@ -4,6 +4,7 @@ mod claim;
 mod french_directory;
 mod http;
 mod model;
+mod network;
 mod query;
 mod status_history;
 mod uuid_bound;
@@ -17,6 +18,7 @@ pub(crate) use french_directory::{
     DirectoryEntry, DirectoryEntryType, DirectoryPage, DirectoryQuery, PostalAddress,
 };
 pub(crate) use http::{Endpoints, HttpClient};
+pub(crate) use network::{Network, Registration};
 pub(crate) use query::SearchQuery;
 pub(crate) use status_history::{StatusEvent, StatusParty, buyer, seller};
 pub(crate) use uuid_bound::UuidBound;
@@ -41,6 +43,16 @@ pub(crate) trait BusinessEntityDirectory {
 pub(crate) trait ClaimConfiguration {
     /// Replaces the whole claim configuration of a business entity.
     fn update_claim(&mut self, business_entity_id: &str, claim: &Claim) -> Result<()>;
+}
+
+pub(crate) trait IdentifierRegistration {
+    /// Publishes an identifier of a business entity on a network.
+    fn register_identifier(
+        &mut self,
+        scheme: &str,
+        value: &str,
+        network: Network,
+    ) -> Result<Registration>;
 }
 
 pub(crate) trait InvoiceStatuses {

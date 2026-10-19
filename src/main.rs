@@ -6,7 +6,8 @@ use iopole::Cli;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let mut stdout = io::stdout().lock();
+    // Not locked for the whole run: `iopole mcp` hands stdout to its transport.
+    let mut stdout = io::stdout();
 
     match iopole::run(&cli, &mut stdout) {
         Ok(()) => ExitCode::SUCCESS,

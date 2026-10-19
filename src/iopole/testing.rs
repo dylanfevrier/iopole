@@ -9,7 +9,8 @@ use super::status_history::{
     StatusResponse,
 };
 use super::{
-    BusinessEntityDirectory, Claim, ClaimConfiguration, InvoiceSearch, InvoiceStatuses, SearchQuery,
+    BusinessEntityDirectory, Claim, ClaimConfiguration, IdentifierRegistration, InvoiceSearch,
+    InvoiceStatuses, Network, Registration, SearchQuery,
 };
 use crate::invoice::{Invoice, Party, Status};
 use crate::{Error, Result};
@@ -272,5 +273,43 @@ impl BusinessEntityDirectory for &mut FakeClaims {
 impl ClaimConfiguration for &mut FakeClaims {
     fn update_claim(&mut self, business_entity_id: &str, claim: &Claim) -> Result<()> {
         (**self).update_claim(business_entity_id, claim)
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct FakeRegistrations {
+    pub(crate) directory: FakeDirectory,
+    /// Networks that already publish the identifier.
+    pub(crate) up_to_date: Vec<Network>,
+    pub(crate) registered: Vec<(String, String, Network)>,
+    pub(crate) refusal: Option<Error>,
+}
+
+impl BusinessEntityDirectory for &mut FakeRegistrations {
+    fn find(&mut self, identifier_value: &str) -> Result<Vec<BusinessEntity>> {
+        self.directory.find(identifier_value)
+    }
+
+    fn find_raw(&mut self, identifier_value: &str) -> Result<Vec<serde_json::Value>> {
+        self.directory.find_raw(identifier_value)
+    }
+}
+
+impl IdentifierRegistration for &mut FakeRegistrations {
+    fn register_identifier(
+        &mut self,
+        scheme: &str,
+        value: &str,
+        network: Network,
+    ) -> Result<Registration> {
+        if let Some(refusal) = self.refusal.take() {
+            return Err(refusal);
+        }
+        if self.up_to_date.contains(&network) {
+            return Ok(Registration::AlreadyUpToDate);
+        }
+        self.registered
+            .push((scheme.to_owned(), value.to_owned(), network));
+        Ok(Registration::Registered)
     }
 }

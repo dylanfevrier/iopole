@@ -5,8 +5,9 @@ use std::io::Write;
 
 pub(crate) use args::Args;
 
+use super::single_entity;
 use crate::credentials::{CredentialStore, Credentials};
-use crate::iopole::{BusinessEntity, BusinessEntityDirectory, ClaimConfiguration};
+use crate::iopole::{BusinessEntityDirectory, ClaimConfiguration};
 use crate::{Error, Result};
 
 pub(crate) fn execute<C: BusinessEntityDirectory + ClaimConfiguration>(
@@ -26,21 +27,6 @@ pub(crate) fn execute<C: BusinessEntityDirectory + ClaimConfiguration>(
     render::updated(out, &entity, business_entity_id, args)
 }
 
-/// Looked up as `entity search` does: the claim must not land on a guess.
-fn single_entity(
-    mut entities: Vec<BusinessEntity>,
-    identifier_value: &str,
-) -> Result<BusinessEntity> {
-    match entities.len() {
-        0 => Err(Error::UnregisteredIdentifier(identifier_value.to_owned())),
-        1 => Ok(entities.remove(0)),
-        count => Err(Error::AmbiguousIdentifier {
-            identifier_value: identifier_value.to_owned(),
-            count,
-        }),
-    }
-}
-
 fn missing_id(identifier_value: &str) -> Error {
     Error::Payload(serde::de::Error::custom(format!(
         "the business entity of {identifier_value} has no businessEntityId"
@@ -52,8 +38,8 @@ mod tests {
     use super::args::ClaimDirection;
     use super::*;
     use crate::credentials::testing::InMemoryStore;
-    use crate::iopole::Claim;
     use crate::iopole::testing::{BVS_RENOVATION_ID, FakeClaims, FakeDirectory, bvs_renovation};
+    use crate::iopole::{BusinessEntity, Claim};
 
     const SIREN: &str = "980217632";
 

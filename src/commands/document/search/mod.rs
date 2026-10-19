@@ -4,10 +4,10 @@ mod render;
 use std::io::Write;
 use std::path::Path;
 
-pub(crate) use args::Args;
+pub(crate) use args::{Args, RoleFilter, parse_code};
 
 use crate::Result;
-use crate::catalog::{self, Page};
+use crate::catalog::{self, InvoiceFilter, Page};
 use crate::database::{self, DatabaseKeyStore};
 
 pub(crate) fn execute(
@@ -16,12 +16,7 @@ pub(crate) fn execute(
     args: &Args,
     out: &mut impl Write,
 ) -> Result<()> {
-    let filter = args.filter()?;
-    let page = if database_path.exists() {
-        catalog::find(&database::open(database_path, keys)?, &filter)?
-    } else {
-        Page::default()
-    };
+    let page = find(database_path, keys, &args.filter()?)?;
     if args.json {
         return render::json(out, &page);
     }
@@ -29,6 +24,18 @@ pub(crate) fn execute(
         return render::no_invoice(out, &args.sync_command());
     }
     render::invoices(out, &page, args.identifiers)
+}
+
+/// Nothing without local database, which is not created.
+pub(crate) fn find(
+    database_path: &Path,
+    keys: &impl DatabaseKeyStore,
+    filter: &InvoiceFilter,
+) -> Result<Page> {
+    if !database_path.exists() {
+        return Ok(Page::default());
+    }
+    catalog::find(&database::open(database_path, keys)?, filter)
 }
 
 #[cfg(test)]

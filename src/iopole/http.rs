@@ -11,10 +11,11 @@ use super::business_entity::{
 };
 use super::french_directory::{DirectoryPage, DirectoryQuery, EMPTY_PAGE, parse_directory_page};
 use super::model::parse_page;
+use super::network::is_already_up_to_date;
 use super::status_history::{StatusEvent, parse_status_history};
 use super::{
-    BusinessEntityDirectory, Claim, ClaimConfiguration, FrenchDirectory, InvoiceSearch,
-    InvoiceStatuses, MAX_PAGE_LIMIT, SearchQuery,
+    BusinessEntityDirectory, Claim, ClaimConfiguration, FrenchDirectory, IdentifierRegistration,
+    InvoiceSearch, InvoiceStatuses, MAX_PAGE_LIMIT, Network, Registration, SearchQuery,
 };
 use crate::credentials::Credentials;
 use crate::invoice::Invoice;
@@ -138,6 +139,17 @@ impl HttpClient {
             client
                 .authorized(client.agent.put(&url), authorization)
                 .send_json(body)
+        })
+    }
+
+    /// Only for requests that are safe to repeat, since they are retried like
+    /// reads.
+    fn post(&mut self, path: &str) -> Result<String> {
+        let url = join(&self.endpoints.api_url, path);
+        self.send(|client, authorization| {
+            client
+                .authorized(client.agent.post(&url), authorization)
+                .send_empty()
         })
     }
 
@@ -278,6 +290,29 @@ fn claim_refusal(business_entity_id: &str, code: Option<String>) -> Error {
             Error::ActiveInboundRegistrations(id)
         }
         _ => Error::UnexpectedStatus { status: 404, code },
+    }
+}
+
+/// Repeating a registration only finds the directory up to date.
+impl IdentifierRegistration for HttpClient {
+    fn register_identifier(
+        &mut self,
+        scheme: &str,
+        value: &str,
+        network: Network,
+    ) -> Result<Registration> {
+        let path = format!(
+            "{BUSINESS_ENTITY_PATH}/identifier/scheme/{scheme}/value/{value}/network/{}",
+            network.as_str()
+        );
+        match self.post(&path) {
+            Ok(_) => Ok(Registration::Registered),
+            Err(Error::UnexpectedStatus {
+                status: 404,
+                code: Some(code),
+            }) if is_already_up_to_date(&code) => Ok(Registration::AlreadyUpToDate),
+            Err(err) => Err(err),
+        }
     }
 }
 

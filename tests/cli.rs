@@ -127,3 +127,47 @@ fn entity_update_claim_requires_a_company_uid() {
         .failure()
         .stderr(predicate::str::contains("--company-uid"));
 }
+
+#[test]
+fn entity_register_rejects_an_unknown_network() {
+    iopole()
+        .args(["entity", "register", "982740128", "--network", "ppf"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--network"));
+}
+
+/// The whole stdio exchange, as Claude Code or Codex run it: stdout must carry
+/// the protocol and nothing else.
+#[test]
+fn mcp_lists_its_tools_over_stdio() {
+    let home = tempfile::tempdir().unwrap_or_else(|err| panic!("{err}"));
+    let requests = [
+        r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}"#,
+        r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+    ]
+    .join("\n")
+        + "\n";
+
+    let output = iopole()
+        .arg("mcp")
+        .env("HOME", home.path())
+        .env("XDG_CONFIG_HOME", home.path().join("config"))
+        .env("XDG_DATA_HOME", home.path().join("data"))
+        .write_stdin(requests)
+        .timeout(std::time::Duration::from_secs(10))
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+
+    let stdout = String::from_utf8_lossy(&output);
+    for line in stdout.lines() {
+        assert!(line.starts_with('{'), "not a protocol message: {line}");
+    }
+    assert!(stdout.contains(r#""name":"iopole""#));
+    assert!(stdout.contains("search_invoices"));
+    assert!(stdout.contains("invoice_stats"));
+}

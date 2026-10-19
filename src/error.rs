@@ -89,6 +89,9 @@ pub enum Error {
     )]
     ActiveInboundRegistrations(String),
 
+    #[error("MCP server failure: {0}")]
+    Mcp(String),
+
     #[error("invalid date: {0}")]
     InvalidDate(#[from] jiff::Error),
 

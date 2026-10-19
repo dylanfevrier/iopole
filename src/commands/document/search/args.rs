@@ -2,6 +2,8 @@ use std::fmt::Write as _;
 
 use clap::{Args as ClapArgs, ValueEnum};
 use jiff::Timestamp;
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use super::super::{DirectionFilter, parse_instant};
 use crate::catalog::{InvoiceFilter, Role};
@@ -87,13 +89,14 @@ impl Args {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum RoleFilter {
     Seller,
     Buyer,
 }
 
-fn parse_code(value: &str) -> Result<String, String> {
+pub(crate) fn parse_code(value: &str) -> Result<String, String> {
     let code = value.trim().to_uppercase();
     if code.is_empty() {
         Err("empty value".to_owned())

@@ -31,6 +31,8 @@ pub(crate) enum Command {
         #[command(subcommand)]
         command: directory::Command,
     },
+    /// Serve the invoices to AI assistants (Claude, Codex...) as MCP tools over stdio
+    Mcp,
 }
 
 pub(crate) fn parse_identifier_value(value: &str) -> Result<String, String> {

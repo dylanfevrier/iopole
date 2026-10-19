@@ -7,6 +7,8 @@ use clap::{Subcommand, ValueEnum};
 use jiff::Timestamp;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 use crate::invoice::Direction;
 
@@ -22,7 +24,8 @@ pub(crate) enum Command {
     Status(status::Args),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum DirectionFilter {
     Inbound,
     Outbound,
@@ -39,7 +42,7 @@ impl DirectionFilter {
     }
 }
 
-fn parse_instant(value: &str) -> std::result::Result<Timestamp, String> {
+pub(crate) fn parse_instant(value: &str) -> std::result::Result<Timestamp, String> {
     value
         .parse::<Timestamp>()
         .or_else(|_| {

@@ -1,41 +1,33 @@
-use std::cmp::Reverse;
-use std::collections::BTreeMap;
 use std::io::Write;
 
+use super::StateSummary;
 use crate::Result;
-use crate::catalog::StateCount;
 use crate::render::{MISSING, Table};
 
 const NO_STATUS: &str = "(no status)";
 
-/// Each state with its total, then its last statuses, most frequent first.
-pub(super) fn counts(out: &mut impl Write, counts: Vec<StateCount>) -> Result<()> {
-    let mut states: BTreeMap<String, Vec<(Option<String>, usize)>> = BTreeMap::new();
-    for count in counts {
-        states
-            .entry(count.state)
-            .or_default()
-            .push((count.last_status_code, count.count));
-    }
-
+/// Each state with its total, then its last statuses.
+pub(super) fn states(out: &mut impl Write, states: &[StateSummary]) -> Result<()> {
     let mut table = Table::new(&["STATE", "STATUS", "COUNT"]).align_right("COUNT");
-    let mut total = 0;
-    for (state, mut statuses) in states {
-        let state_total: usize = statuses.iter().map(|(_, count)| count).sum();
-        total += state_total;
-        table.push([state, MISSING.to_owned(), state_total.to_string()]);
-        statuses.sort_by(|(a_status, a_count), (b_status, b_count)| {
-            (Reverse(a_count), a_status).cmp(&(Reverse(b_count), b_status))
-        });
-        for (status, count) in statuses {
+    for state in states {
+        table.push([
+            state.state.clone(),
+            MISSING.to_owned(),
+            state.count.to_string(),
+        ]);
+        for status in &state.statuses {
             table.push([
                 MISSING.to_owned(),
-                status.unwrap_or_else(|| NO_STATUS.to_owned()),
-                count.to_string(),
+                status
+                    .status
+                    .clone()
+                    .unwrap_or_else(|| NO_STATUS.to_owned()),
+                status.count.to_string(),
             ]);
         }
     }
     write!(out, "{table}")?;
+    let total: usize = states.iter().map(|state| state.count).sum();
     writeln!(out, "\n{total} invoices.")?;
     Ok(())
 }
@@ -52,25 +44,29 @@ pub(super) fn no_invoice(out: &mut impl Write) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn count(state: &str, status: Option<&str>, count: usize) -> StateCount {
-        StateCount {
-            state: state.to_owned(),
-            last_status_code: status.map(str::to_owned),
-            count,
-        }
-    }
+    use crate::commands::document::stat::StatusCount;
 
     #[test]
-    fn details_each_state_by_status_most_frequent_first() -> Result<()> {
+    fn shows_each_state_then_its_statuses() -> Result<()> {
+        let status = |status: Option<&str>, count| StatusCount {
+            status: status.map(str::to_owned),
+            count,
+        };
         let mut out = Vec::new();
 
-        counts(
+        states(
             &mut out,
-            vec![
-                count("WRONG_ROUTING", None, 3000),
-                count("DELIVERED", Some("ISSUED"), 420),
-                count("DELIVERED", Some("RECEIVED"), 580),
+            &[
+                StateSummary {
+                    state: "DELIVERED".to_owned(),
+                    count: 1000,
+                    statuses: vec![status(Some("RECEIVED"), 580), status(Some("ISSUED"), 420)],
+                },
+                StateSummary {
+                    state: "WRONG_ROUTING".to_owned(),
+                    count: 3000,
+                    statuses: vec![status(None, 3000)],
+                },
             ],
         )?;
 
