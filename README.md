@@ -2,6 +2,198 @@
 
 Command-line tool for the Iopole platform.
 
+## Installation
+
+Ces étapes mènent d'une machine sans Rust jusqu'aux factures synchronisées en
+local, sur macOS ou Linux.
+
+### 1. Installer les outils de compilation
+
+La base locale est chiffrée avec SQLCipher, compilé depuis ses sources C
+pendant la construction : il faut donc un compilateur C.
+
+- **macOS** : installer les outils en ligne de commande de Xcode (le
+  chiffrement utilise CommonCrypto, fourni par le système, rien d'autre à
+  installer) :
+
+  ```sh
+  xcode-select --install
+  ```
+
+- **Debian / Ubuntu** : installer un compilateur et les en-têtes OpenSSL :
+
+  ```sh
+  sudo apt update
+  sudo apt install build-essential pkg-config libssl-dev git curl
+  ```
+
+- **Fedora** :
+
+  ```sh
+  sudo dnf install gcc make pkgconf-pkg-config openssl-devel git curl
+  ```
+
+### 2. Installer Rust
+
+Installer Rust avec [rustup](https://rustup.rs), l'installateur officiel, en
+gardant les options par défaut :
+
+```sh
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Ouvrir un nouveau terminal (ou lancer `. "$HOME/.cargo/env"`) pour que `cargo`
+soit dans le `PATH`, puis vérifier :
+
+```sh
+cargo --version
+```
+
+Rust 1.88 ou plus récent est requis. Le projet fixe le canal `stable` dans
+`rust-toolchain.toml` : rustup l'installe, avec `rustfmt` et `clippy`, au
+premier lancement de `cargo` dans le projet. Pour mettre à jour une
+installation plus ancienne : `rustup update`.
+
+### 3. Récupérer les sources
+
+```sh
+git clone git@github.com:dylanfevrier/iopole.git
+cd iopole
+```
+
+### 4. Compiler et installer `iopole`
+
+```sh
+cargo install --path .
+```
+
+La première compilation télécharge les dépendances et compile SQLCipher : elle
+prend quelques minutes. Le binaire est installé dans `~/.cargo/bin`, que rustup
+a ajouté au `PATH`. Vérifier :
+
+```sh
+iopole --version
+iopole --help
+```
+
+Pour mettre à jour plus tard : `git pull`, puis de nouveau
+`cargo install --path .`.
+
+### 5. Se connecter à Iopole
+
+Récupérer auprès d'Iopole le **client**, le **secret** et le **customer ID** de
+l'accès API, puis :
+
+```sh
+iopole auth login
+```
+
+Les trois valeurs sont demandées l'une après l'autre (le secret ne s'affiche
+pas) et enregistrées dans `~/.config/iopole/secrets.json`, lisible par vous
+seul. Voir [Auth](#auth).
+
+### 6. Synchroniser les factures
+
+Récupérer les factures depuis une date de début (format `AAAA-MM-JJ`) jusqu'à
+maintenant :
+
+```sh
+iopole document sync --from 2026-09-01
+```
+
+Une barre de progression s'affiche, puis le nombre de factures récupérées :
+
+```
+████████████████████████████████████████ 100%
+1234 invoices retrieved. 1000 inbound. 234 outbound.
+```
+
+La même commande peut être relancée à tout moment : elle ne récupère que ce
+qui manque depuis la dernière fois. Voir [Document sync](#document-sync) pour
+`--to`, `--direction` et `--refresh`.
+
+### 7. Explorer les factures
+
+Les factures sont maintenant dans la base locale :
+
+```sh
+iopole document stat               # nombre de factures par état et statut
+iopole document search 352862346   # factures d'une entreprise, par SIREN
+```
+
+### 8. Autres usages
+
+Chaque commande a sa section détaillée plus bas, et `iopole <commande> --help`
+liste toutes ses options.
+
+**Factures**
+
+```sh
+# Filtrer la recherche : rôle, état, statut, période, nombre de résultats
+iopole document search 352862346 --role buyer --state VALID,DELIVERED --from 2026-09-01 --limit 50
+
+# Afficher le SIREN ou le BCE de chaque partie, à réutiliser avec `entity search`
+iopole document search --identifiers
+
+# Sortie JSON, par exemple pour `jq`
+iopole document search 352862346 --json
+
+# Historique des statuts d'une facture, demandé en direct à Iopole
+iopole document status 01a10b05-e3fd-74c8-b9cd-ce8e4c012777
+
+# Rechercher de nouveau une période et réécrire les factures modifiées
+iopole document sync --from 2026-09-01 --refresh
+```
+
+Voir [Document search](#document-search), [Document status](#document-status)
+et [Document sync](#document-sync).
+
+**Entités de l'opérateur**
+
+```sh
+# Entités enregistrées chez Iopole pour un identifiant (SIREN, SIRET, BCE...)
+iopole entity search 352862346
+
+# Remplacer la revendication d'une entité (rôle `admin` requis)
+iopole entity update-claim 980217632 --company-uid 6071797
+
+# Publier un identifiant sur l'annuaire français et sur Peppol
+iopole entity register 982740128
+```
+
+Voir [Entity search](#entity-search), [Entity claim update](#entity-claim-update)
+et [Entity registration](#entity-registration).
+
+**Annuaire français**
+
+```sh
+# Rechercher une entreprise, cliente de l'opérateur ou non, par SIREN ou par nom
+iopole directory french 352862346
+iopole directory french --name "BVS RENO*"
+```
+
+Voir [French directory](#french-directory).
+
+**Assistants IA**
+
+```sh
+# Donner à Claude Code l'accès en lecture seule aux factures locales
+claude mcp add iopole -- iopole mcp
+```
+
+Voir [MCP server](#mcp-server) pour Codex et Claude Desktop.
+
+**Déconnexion**
+
+```sh
+# Supprimer les identifiants, la base locale et sa clé
+iopole auth logout
+```
+
+Les commandes ci-dessous sont écrites avec `cargo run --`, pour les lancer
+depuis les sources sans installer ; une fois `iopole` installé, remplacer
+`cargo run --` par `iopole`.
+
 ## Usage
 
 ```sh
@@ -210,7 +402,7 @@ stdio. It never calls Iopole: the invoices come from `document sync`.
 | `search_invoices` | lists invoices like `document search`, as JSON |
 | `invoice_stats` | counts invoices by state and last status like `document stat` |
 
-Both are read-only. After `cargo install --path .`:
+Both are read-only. Once `iopole` is installed (see [Installation](#installation)):
 
 ```sh
 # Claude Code
@@ -230,12 +422,6 @@ args = ["mcp"]
 ```
 
 To try the tools by hand: `npx @modelcontextprotocol/inspector iopole mcp`.
-
-## Installation
-
-```sh
-cargo install --path .
-```
 
 ## Development
 
